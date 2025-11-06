@@ -1,6 +1,7 @@
 Flask
 Flask-SQLAlchemy
-Flask-LoginFlask-WTF
+Flask-Login
+Flask-WTF
 pytest
 coverage
 pylint
