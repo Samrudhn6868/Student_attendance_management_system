@@ -14,6 +14,7 @@ from flask import (
     redirect,
     url_for,
     flash,
+    jsonify,
 )
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import (
@@ -25,6 +26,10 @@ from flask_login import (
     current_user,
 )
 from werkzeug.security import generate_password_hash, check_password_hash
+
+# SAS-88: Import RBAC components
+from attendance_routes import attendance_bp
+from auth_middleware import create_token_response
 
 # Load environment variables
 load_dotenv()
@@ -57,6 +62,7 @@ class User(UserMixin, db.Model):
     password_hash = db.Column(db.String(120), nullable=False)
     is_faculty = db.Column(db.Boolean, default=False)
     name = db.Column(db.String(100), nullable=False)
+    role = db.Column(db.String(20), default='student')  # SAS-88: Added role column
 
     def set_password(self, password):
         """Hash and set the user's password."""
@@ -114,6 +120,181 @@ def dashboard():
         return render_template('faculty_dashboard.html')
 
     return render_template('student_dashboard.html')
+
+# ============================================================================
+# SAS-88: RBAC Test Page
+# ============================================================================
+
+@app.route('/test-rbac')
+@login_required
+def test_rbac():
+    """Simple HTML page to test RBAC functionality."""
+    user_role = getattr(current_user, 'role', 'student' if not current_user.is_faculty else 'teacher')
+    
+    html = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>SAS-88 RBAC Test Page</title>
+        <style>
+            body {{
+                font-family: Arial, sans-serif;
+                max-width: 800px;
+                margin: 50px auto;
+                padding: 20px;
+                background-color: #f5f5f5;
+            }}
+            .container {{
+                background-color: white;
+                padding: 30px;
+                border-radius: 10px;
+                box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            }}
+            h1 {{
+                color: #333;
+                border-bottom: 3px solid #007bff;
+                padding-bottom: 10px;
+            }}
+            .user-info {{
+                background-color: #e3f2fd;
+                padding: 15px;
+                border-radius: 5px;
+                margin: 20px 0;
+            }}
+            .role-badge {{
+                display: inline-block;
+                padding: 5px 15px;
+                border-radius: 20px;
+                font-weight: bold;
+                margin-left: 10px;
+            }}
+            .role-student {{ background-color: #90caf9; color: white; }}
+            .role-teacher {{ background-color: #81c784; color: white; }}
+            .role-admin {{ background-color: #e57373; color: white; }}
+            .test-links {{
+                margin: 30px 0;
+            }}
+            .test-link {{
+                display: block;
+                padding: 15px;
+                margin: 10px 0;
+                border-radius: 5px;
+                text-decoration: none;
+                color: white;
+                font-weight: bold;
+                text-align: center;
+                transition: transform 0.2s;
+            }}
+            .test-link:hover {{
+                transform: scale(1.02);
+            }}
+            .link-allowed {{ background-color: #4caf50; }}
+            .link-denied {{ background-color: #f44336; }}
+            .link-maybe {{ background-color: #ff9800; }}
+            .info {{
+                background-color: #fff3cd;
+                padding: 15px;
+                border-left: 4px solid #ffc107;
+                margin: 20px 0;
+            }}
+            .logout {{
+                display: inline-block;
+                padding: 10px 20px;
+                background-color: #6c757d;
+                color: white;
+                text-decoration: none;
+                border-radius: 5px;
+                margin-top: 20px;
+            }}
+            .logout:hover {{
+                background-color: #5a6268;
+            }}
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h1>🔐 SAS-88 RBAC Test Page</h1>
+            
+            <div class="user-info">
+                <strong>👤 Logged in as:</strong> {current_user.name} ({current_user.username})
+                <span class="role-badge role-{user_role}">{user_role.upper()}</span>
+            </div>
+            
+            <div class="info">
+                <strong>ℹ️ Instructions:</strong> Click the links below to test role-based access control.
+                You should see JSON responses or 403 Forbidden errors based on your role.
+            </div>
+            
+            <div class="test-links">
+                <h3>📋 Test Attendance Endpoints:</h3>
+                
+                <a href="/attendance/view" class="test-link link-allowed">
+                    ✅ View Attendance (All roles can access)
+                </a>
+                
+                <a href="/attendance/mark" class="test-link {'link-maybe' if user_role in ['teacher', 'admin'] else 'link-denied'}">
+                    {'✅' if user_role in ['teacher', 'admin'] else '❌'} Mark Attendance 
+                    (Teacher & Admin only)
+                </a>
+                
+                <a href="/attendance/override" class="test-link {'link-allowed' if user_role == 'admin' else 'link-denied'}">
+                    {'✅' if user_role == 'admin' else '❌'} Override Attendance 
+                    (Admin only)
+                </a>
+            </div>
+            
+            <div class="info">
+                <strong>Expected Results:</strong><br>
+                • <strong>Student</strong>: Can only access "View Attendance"<br>
+                • <strong>Teacher</strong>: Can access "View" and "Mark"<br>
+                • <strong>Admin</strong>: Can access all three endpoints<br>
+                • Unauthorized access returns 403 Forbidden error
+            </div>
+            
+            <a href="/logout" class="logout">← Logout</a>
+            <a href="/dashboard" class="logout" style="background-color: #007bff;">Dashboard</a>
+        </div>
+    </body>
+    </html>
+    """
+    return html
+
+# ============================================================================
+# SAS-88: JWT API Endpoints
+# ============================================================================
+
+@app.route('/api/login', methods=['POST'])
+def api_login():
+    """API login endpoint that returns JWT token for API authentication."""
+    data = request.get_json()
+    
+    if not data:
+        return jsonify({
+            'error': 'Invalid request',
+            'message': 'Request body must be JSON'
+        }), 400
+    
+    username = data.get('username')
+    password = data.get('password')
+    
+    if not username or not password:
+        return jsonify({
+            'error': 'Missing credentials',
+            'message': 'Both username and password are required'
+        }), 400
+    
+    user = User.query.filter_by(username=username).first()
+    
+    if user and user.check_password(password):
+        return jsonify(create_token_response(user)), 200
+    
+    return jsonify({
+        'error': 'Invalid credentials',
+        'message': 'Username or password is incorrect'
+    }), 401
+
+# SAS-88: Register attendance routes with RBAC
+app.register_blueprint(attendance_bp)
 
 if __name__ == '__main__':
     with app.app_context():
