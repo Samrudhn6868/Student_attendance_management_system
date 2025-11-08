@@ -107,6 +107,7 @@ def test_attendance_routes_structure():
     print("="*70)
     
     from attendance_routes import attendance_bp
+    from flask import Flask
     
     print("\n1. Testing blueprint registration:")
     assert attendance_bp is not None
@@ -115,10 +116,31 @@ def test_attendance_routes_structure():
     print("   ✅ Blueprint configured correctly")
     
     print("\n2. Testing route registration:")
-    routes = [rule.rule for rule in attendance_bp.url_map.iter_rules()]
+    # Create a temporary Flask app to register the blueprint
+    temp_app = Flask(__name__)
+    temp_app.register_blueprint(attendance_bp)
+    
+    # Now we can access routes through the app's url_map
+    routes = [rule.rule for rule in temp_app.url_map.iter_rules() 
+              if rule.rule.startswith('/attendance')]
     print(f"   Registered routes: {len(routes)}")
     
-    # Check for expected routes (may vary based on implementation)
+    # Check for expected routes
+    expected_routes = [
+        '/attendance/view',
+        '/attendance/mark',
+        '/attendance/override',
+        '/attendance/api/view',
+        '/attendance/api/mark',
+        '/attendance/api/override'
+    ]
+    
+    for expected in expected_routes:
+        if expected in routes:
+            print(f"   ✅ Found route: {expected}")
+        else:
+            print(f"   ⚠️  Missing route: {expected}")
+    
     print("   ✅ Routes registered")
 
 
