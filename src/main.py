@@ -31,6 +31,9 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from attendance_routes import attendance_bp
 from auth_middleware import create_token_response
 
+# SAS-93: Import attendance API
+from attendance_api import attendance_api_bp
+
 # Load environment variables
 load_dotenv()
 
@@ -295,6 +298,9 @@ def api_login():
 
 # SAS-88: Register attendance routes with RBAC
 app.register_blueprint(attendance_bp)
+
+# SAS-93: Register attendance API routes
+app.register_blueprint(attendance_api_bp)
 
 if __name__ == '__main__':
     with app.app_context():
