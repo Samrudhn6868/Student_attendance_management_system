@@ -47,8 +47,16 @@ class Attendance(db.Model):
         student_id (int): ID of the student
         date (date): Date of attendance
         is_present (bool): Whether student was present
+        is_overridden (bool): Whether attendance was overridden by admin
+        override_reason (str): Reason for override (if any)
+        overridden_by (int): ID of admin who overrode attendance
+        override_timestamp (str): ISO timestamp of when override occurred
     """
     id = db.Column(db.Integer, primary_key=True)
     student_id = db.Column(db.Integer, nullable=False)
     date = db.Column(db.Date, default=date.today, nullable=False)
     is_present = db.Column(db.Boolean, default=True)
+    is_overridden = db.Column(db.Boolean, default=False)
+    override_reason = db.Column(db.String(500), nullable=True)
+    overridden_by = db.Column(db.Integer, nullable=True)
+    override_timestamp = db.Column(db.String(50), nullable=True)
