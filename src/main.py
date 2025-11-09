@@ -132,8 +132,12 @@ def dashboard():
 @login_required
 def test_rbac():
     """Simple HTML page to test RBAC functionality."""
-    user_role = getattr(current_user, 'role', 'student' if not current_user.is_faculty else 'teacher')
-    
+    user_role = getattr(
+        current_user,
+        'role',
+        'student' if not current_user.is_faculty else 'teacher'
+    )
+
     html = f"""
     <!DOCTYPE html>
     <html>
@@ -217,35 +221,35 @@ def test_rbac():
     <body>
         <div class="container">
             <h1>🔐 SAS-88 RBAC Test Page</h1>
-            
+
             <div class="user-info">
                 <strong>👤 Logged in as:</strong> {current_user.name} ({current_user.username})
                 <span class="role-badge role-{user_role}">{user_role.upper()}</span>
             </div>
-            
+
             <div class="info">
                 <strong>ℹ️ Instructions:</strong> Click the links below to test role-based access control.
                 You should see JSON responses or 403 Forbidden errors based on your role.
             </div>
-            
+
             <div class="test-links">
                 <h3>📋 Test Attendance Endpoints:</h3>
-                
+
                 <a href="/attendance/view" class="test-link link-allowed">
                     ✅ View Attendance (All roles can access)
                 </a>
-                
+
                 <a href="/attendance/mark" class="test-link {'link-maybe' if user_role in ['teacher', 'admin'] else 'link-denied'}">
-                    {'✅' if user_role in ['teacher', 'admin'] else '❌'} Mark Attendance 
+                    {'✅' if user_role in ['teacher', 'admin'] else '❌'} Mark Attendance
                     (Teacher & Admin only)
                 </a>
-                
+
                 <a href="/attendance/override" class="test-link {'link-allowed' if user_role == 'admin' else 'link-denied'}">
-                    {'✅' if user_role == 'admin' else '❌'} Override Attendance 
+                    {'✅' if user_role == 'admin' else '❌'} Override Attendance
                     (Admin only)
                 </a>
             </div>
-            
+
             <div class="info">
                 <strong>Expected Results:</strong><br>
                 • <strong>Student</strong>: Can only access "View Attendance"<br>
@@ -253,7 +257,7 @@ def test_rbac():
                 • <strong>Admin</strong>: Can access all three endpoints<br>
                 • Unauthorized access returns 403 Forbidden error
             </div>
-            
+
             <a href="/logout" class="logout">← Logout</a>
             <a href="/dashboard" class="logout" style="background-color: #007bff;">Dashboard</a>
         </div>
@@ -270,27 +274,27 @@ def test_rbac():
 def api_login():
     """API login endpoint that returns JWT token for API authentication."""
     data = request.get_json()
-    
+
     if not data:
         return jsonify({
             'error': 'Invalid request',
             'message': 'Request body must be JSON'
         }), 400
-    
+
     username = data.get('username')
     password = data.get('password')
-    
+
     if not username or not password:
         return jsonify({
             'error': 'Missing credentials',
             'message': 'Both username and password are required'
         }), 400
-    
+
     user = User.query.filter_by(username=username).first()
-    
+
     if user and user.check_password(password):
         return jsonify(create_token_response(user)), 200
-    
+
     return jsonify({
         'error': 'Invalid credentials',
         'message': 'Username or password is incorrect'
