@@ -1,4 +1,4 @@
-Flask
+﻿Flask
 Flask-SQLAlchemy
 Flask-Login
 Flask-WTF
@@ -8,3 +8,4 @@ pylint
 bandit
 python-dotenv
 Werkzeug
+PyJWT
