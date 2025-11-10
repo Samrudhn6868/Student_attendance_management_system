@@ -33,13 +33,103 @@
 
     <div class="container mt-4">
         <h2>Faculty Dashboard</h2>
+        <p class="lead">Welcome back, {{ current_user.name }}! You are logged in as Faculty (Role: {{ current_user.role }})</p>
+        
         <div class="row mt-4">
+            <!-- Quick Stats -->
+            <div class="col-md-4">
+                <div class="card bg-primary text-white">
+                    <div class="card-body">
+                        <h5 class="card-title">Total Classes</h5>
+                        <h2>12</h2>
+                        <p class="mb-0">Active courses</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card bg-success text-white">
+                    <div class="card-body">
+                        <h5 class="card-title">Students</h5>
+                        <h2>245</h2>
+                        <p class="mb-0">Enrolled students</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card bg-info text-white">
+                    <div class="card-body">
+                        <h5 class="card-title">Avg Attendance</h5>
+                        <h2>87%</h2>
+                        <p class="mb-0">This semester</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row mt-4">
+            <!-- Attendance Management -->
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-body">
+                        <h5 class="card-title">📋 Attendance Management</h5>
+                        <p>Manage class attendance and view reports</p>
+                        <div class="d-grid gap-2">
+                            <a href="/attendance/mark" class="btn btn-primary">Mark Attendance</a>
+                            <a href="/attendance/view" class="btn btn-outline-primary">View Attendance Records</a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- RBAC Features -->
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-body">
+                        <h5 class="card-title">🔐 Role-Based Access Control</h5>
+                        <p>Test RBAC features and permissions</p>
+                        <div class="d-grid gap-2">
+                            <a href="/test-rbac" class="btn btn-success">Test RBAC Features</a>
+                            <a href="/api/login" class="btn btn-outline-success">API Documentation</a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row mt-4">
+            <!-- Account Info -->
             <div class="col-md-12">
                 <div class="card">
                     <div class="card-body">
-                        <h5 class="card-title">Class Attendance Management</h5>
-                        <!-- Add attendance management content here -->
-                        <p>Content coming soon...</p>
+                        <h5 class="card-title">👤 Account Information</h5>
+                        <table class="table table-borderless">
+                            <tr>
+                                <th width="200">Username:</th>
+                                <td>{{ current_user.username }}</td>
+                            </tr>
+                            <tr>
+                                <th>Name:</th>
+                                <td>{{ current_user.name }}</td>
+                            </tr>
+                            <tr>
+                                <th>Role:</th>
+                                <td><span class="badge bg-success">{{ current_user.role.upper() }}</span></td>
+                            </tr>
+                            <tr>
+                                <th>Faculty Status:</th>
+                                <td>{{ "Yes" if current_user.is_faculty else "No" }}</td>
+                            </tr>
+                            <tr>
+                                <th>Account Status:</th>
+                                <td>
+                                    {% if current_user.account_locked %}
+                                        <span class="badge bg-danger">Locked</span>
+                                    {% else %}
+                                        <span class="badge bg-success">Active</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                        </table>
                     </div>
                 </div>
             </div>
