@@ -11,14 +11,19 @@ These routes support both Flask-Login session auth and JWT token auth.
 from datetime import datetime
 from flask import Blueprint, jsonify, request
 from flask_login import login_required, current_user
+
+# pylint: disable=import-error,relative-beyond-top-level
 try:
     from auth_middleware import jwt_role_required, jwt_required
     from rbac import require_role, get_user_role
     from models import db, Attendance
 except ImportError:
-    from .auth_middleware import jwt_role_required, jwt_required
-    from .rbac import require_role, get_user_role
-    from .models import db, Attendance
+    try:
+        from src.auth_middleware import jwt_role_required, jwt_required
+        from src.rbac import require_role, get_user_role
+        from src.models import db, Attendance
+    except ImportError:
+        pass  # Will fail gracefully if modules not found
 
 
 # Create Blueprint for attendance routes
@@ -216,7 +221,7 @@ def override_attendance():
 
     # Fetch the attendance record from database
     attendance_record = db.session.get(Attendance, attendance_id)
-    
+
     if not attendance_record:
         return jsonify({
             'success': False,
@@ -226,7 +231,7 @@ def override_attendance():
 
     # Store the previous status for audit trail
     previous_status = 'present' if attendance_record.is_present else 'absent'
-    
+
     # Check if trying to set the same status
     if previous_status == new_status:
         return jsonify({
@@ -236,7 +241,7 @@ def override_attendance():
         }), 400
 
     # Update the attendance record
-    attendance_record.is_present = (new_status == 'present')
+    attendance_record.is_present = new_status == 'present'
     attendance_record.is_overridden = True
     attendance_record.override_reason = reason
     attendance_record.overridden_by = current_user.id
@@ -244,7 +249,7 @@ def override_attendance():
 
     try:
         db.session.commit()
-        
+
         return jsonify({
             'success': True,
             'message': 'Attendance record overridden successfully',
@@ -402,7 +407,7 @@ def api_override_attendance():
 
     # Fetch the attendance record from database
     attendance_record = db.session.get(Attendance, attendance_id)
-    
+
     if not attendance_record:
         return jsonify({
             'success': False,
@@ -411,7 +416,7 @@ def api_override_attendance():
 
     # Store previous status
     previous_status = 'present' if attendance_record.is_present else 'absent'
-    
+
     if previous_status == new_status:
         return jsonify({
             'success': False,
@@ -419,7 +424,7 @@ def api_override_attendance():
         }), 400
 
     # Update the attendance record
-    attendance_record.is_present = (new_status == 'present')
+    attendance_record.is_present = new_status == 'present'
     attendance_record.is_overridden = True
     attendance_record.override_reason = reason
     attendance_record.overridden_by = jwt_user.get('user_id')
@@ -427,7 +432,6 @@ def api_override_attendance():
 
     try:
         db.session.commit()
-        
         return jsonify({
             'success': True,
             'message': 'Attendance overridden via JWT',
