@@ -88,21 +88,25 @@ class User(UserMixin, db.Model):
         return str(self.id)
 
 class Attendance(db.Model):
-    """Attendance record model for SAS-93.
+    """Attendance record model combining SAS-90 and SAS-93 features.
 
     Enhanced model with support for multiple courses, detailed tracking,
-    and audit trail capabilities.
+    override capabilities, and audit trail.
 
     Attributes:
         id (int): Primary key for attendance record
         student_id (int): ID of the student (legacy, for backward compatibility)
+        date (date): Date of attendance
+        is_present (bool): Whether student was present (legacy)
         student_srn (str): Student SRN identifier (SAS-93)
         course_id (str): Course identifier (SAS-93)
-        date (str): Date of attendance in YYYY-MM-DD format (SAS-93)
         status (str): Attendance status - 'present' or 'absent' (SAS-93)
         marked_by (str): Username of teacher/admin who marked attendance (SAS-93)
         updated_at (datetime): Timestamp of last update, auto-updates (SAS-93)
-        is_present (bool): Whether student was present (legacy, for backward compatibility)
+        is_overridden (bool): Whether attendance was overridden by admin (SAS-90)
+        override_reason (str): Reason for override (SAS-90)
+        overridden_by (int): ID of admin who overrode attendance (SAS-90)
+        override_timestamp (str): ISO timestamp of when override occurred (SAS-90)
     """
     id = db.Column(db.Integer, primary_key=True)
 
@@ -118,6 +122,12 @@ class Attendance(db.Model):
     marked_by = db.Column(db.String(100), nullable=True)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow,
                           onupdate=datetime.utcnow, nullable=False)
+
+    # SAS-90: Override fields for admin attendance correction
+    is_overridden = db.Column(db.Boolean, default=False)
+    override_reason = db.Column(db.String(500), nullable=True)
+    overridden_by = db.Column(db.Integer, nullable=True)
+    override_timestamp = db.Column(db.String(50), nullable=True)
 
     def __repr__(self):
         """String representation of Attendance record."""
