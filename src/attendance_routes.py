@@ -12,18 +12,10 @@ from datetime import datetime
 from flask import Blueprint, jsonify, request
 from flask_login import login_required, current_user
 
-# pylint: disable=import-error,relative-beyond-top-level
-try:
-    from auth_middleware import jwt_role_required, jwt_required
-    from rbac import require_role, get_user_role
-    from models import db, Attendance
-except ImportError:
-    try:
-        from src.auth_middleware import jwt_role_required, jwt_required
-        from src.rbac import require_role, get_user_role
-        from src.models import db, Attendance
-    except ImportError:
-        pass  # Will fail gracefully if modules not found
+# Import RBAC and auth components
+from auth_middleware import jwt_role_required, jwt_required
+from rbac import require_role, get_user_role
+from models import db, Attendance
 
 
 # Create Blueprint for attendance routes

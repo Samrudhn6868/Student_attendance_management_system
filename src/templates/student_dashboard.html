@@ -33,14 +33,130 @@
 
     <div class="container mt-4">
         <h2>Student Dashboard</h2>
+        <p class="lead">Welcome, {{ current_user.name }}! (SRN: {{ current_user.username }})</p>
+        
         <div class="row mt-4">
-            <div class="col-md-12">
+            <!-- Attendance Stats -->
+            <div class="col-md-4">
+                <div class="card bg-primary text-white">
+                    <div class="card-body">
+                        <h5 class="card-title">Overall Attendance</h5>
+                        <h2>92%</h2>
+                        <p class="mb-0">This semester</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card bg-success text-white">
+                    <div class="card-body">
+                        <h5 class="card-title">Classes Attended</h5>
+                        <h2>84/91</h2>
+                        <p class="mb-0">Total classes</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card bg-warning text-dark">
+                    <div class="card-body">
+                        <h5 class="card-title">Enrolled Courses</h5>
+                        <h2>6</h2>
+                        <p class="mb-0">Active courses</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row mt-4">
+            <!-- Attendance Summary -->
+            <div class="col-md-8">
                 <div class="card">
                     <div class="card-body">
-                        <h5 class="card-title">Your Attendance Summary</h5>
-                        <!-- Add attendance summary content here -->
-                        <p>Content coming soon...</p>
+                        <h5 class="card-title">📊 Attendance Summary</h5>
+                        <p>View your attendance records across all courses</p>
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>Course</th>
+                                    <th>Attendance</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td>Database Systems</td>
+                                    <td>95%</td>
+                                    <td><span class="badge bg-success">Good</span></td>
+                                </tr>
+                                <tr>
+                                    <td>Web Development</td>
+                                    <td>88%</td>
+                                    <td><span class="badge bg-success">Good</span></td>
+                                </tr>
+                                <tr>
+                                    <td>Data Structures</td>
+                                    <td>92%</td>
+                                    <td><span class="badge bg-success">Good</span></td>
+                                </tr>
+                                <tr>
+                                    <td>Operating Systems</td>
+                                    <td>73%</td>
+                                    <td><span class="badge bg-warning">Warning</span></td>
+                                </tr>
+                            </tbody>
+                        </table>
+                        <div class="d-grid gap-2 mt-3">
+                            <a href="/attendance/view" class="btn btn-primary">View Detailed Records</a>
+                            <a href="/test-rbac" class="btn btn-outline-primary">Test RBAC Features</a>
+                        </div>
                     </div>
+                </div>
+            </div>
+
+            <!-- Account Info -->
+            <div class="col-md-4">
+                <div class="card">
+                    <div class="card-body">
+                        <h5 class="card-title">👤 Profile</h5>
+                        <table class="table table-borderless table-sm">
+                            <tr>
+                                <th>SRN:</th>
+                                <td>{{ current_user.username }}</td>
+                            </tr>
+                            <tr>
+                                <th>Name:</th>
+                                <td>{{ current_user.name }}</td>
+                            </tr>
+                            <tr>
+                                <th>Role:</th>
+                                <td><span class="badge bg-primary">{{ current_user.role.upper() }}</span></td>
+                            </tr>
+                            <tr>
+                                <th>Status:</th>
+                                <td>
+                                    {% if current_user.account_locked %}
+                                        <span class="badge bg-danger">Locked</span>
+                                    {% else %}
+                                        <span class="badge bg-success">Active</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                        </table>
+                        <hr>
+                        <h6>Quick Links</h6>
+                        <div class="d-grid gap-2">
+                            <a href="#" class="btn btn-sm btn-outline-secondary">Download Report</a>
+                            <a href="#" class="btn btn-sm btn-outline-secondary">Request Leave</a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row mt-4">
+            <div class="col-md-12">
+                <div class="alert alert-info">
+                    <strong>📌 Notice:</strong> Maintain at least 75% attendance to be eligible for exams. 
+                    You are currently at <strong>92%</strong> - Keep it up! 🎉
                 </div>
             </div>
         </div>
