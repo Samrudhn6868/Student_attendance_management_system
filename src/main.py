@@ -5,6 +5,7 @@ students. Designed for local development and testing.
 """
 
 import os
+from datetime import datetime, timedelta
 
 from dotenv import load_dotenv
 from flask import (
@@ -58,6 +59,9 @@ class User(UserMixin, db.Model):
         password_hash: hashed password
         is_faculty: whether the user is a faculty member
         name: full name for display
+        failed_login_attempts: count of consecutive failed login attempts
+        account_locked: whether the account is currently locked
+        locked_at: timestamp when account was locked
     """
 
     id = db.Column(db.Integer, primary_key=True)
@@ -65,6 +69,13 @@ class User(UserMixin, db.Model):
     password_hash = db.Column(db.String(120), nullable=False)
     is_faculty = db.Column(db.Boolean, default=False)
     name = db.Column(db.String(100), nullable=False)
+
+    # Account locking fields
+    failed_login_attempts = db.Column(db.Integer, default=0)
+    account_locked = db.Column(db.Boolean, default=False)
+    locked_at = db.Column(db.DateTime, nullable=True)
+
+    # Role (RBAC) - keep for compatibility with RBAC feature
     role = db.Column(db.String(20), default='student')  # SAS-88: Added role column
 
     def set_password(self, password):
@@ -74,6 +85,49 @@ class User(UserMixin, db.Model):
     def check_password(self, password):
         """Return True if the given plaintext password matches the stored hash."""
         return check_password_hash(self.password_hash, password)
+
+    def is_locked(self):
+        """Check if account is locked.
+        
+        Automatically unlocks if locked for more than 30 minutes.
+        """
+        if not self.account_locked:
+            return False
+        
+        # Auto-unlock after 30 minutes
+        if self.locked_at:
+            unlock_time = self.locked_at + timedelta(minutes=30)
+            if datetime.utcnow() >= unlock_time:
+                self.unlock_account()
+                return False
+        
+        return True
+
+    def lock_account(self):
+        """Lock the account after too many failed attempts."""
+        self.account_locked = True
+        self.locked_at = datetime.utcnow()
+        db.session.commit()
+
+    def unlock_account(self):
+        """Unlock the account and reset failed attempts."""
+        self.account_locked = False
+        self.locked_at = None
+        self.failed_login_attempts = 0
+        db.session.commit()
+
+    def record_failed_login(self):
+        """Increment failed login attempts and lock if threshold reached."""
+        self.failed_login_attempts += 1
+        if self.failed_login_attempts >= 3:
+            self.lock_account()
+        else:
+            db.session.commit()
+
+    def reset_failed_attempts(self):
+        """Reset failed login attempts counter on successful login."""
+        self.failed_login_attempts = 0
+        db.session.commit()
 
 @login_manager.user_loader
 def load_user(user_id):
@@ -97,13 +151,52 @@ def login():
 
         user = User.query.filter_by(username=username).first()
 
-        if user and user.check_password(password):
-            login_user(user)
-            flash('Logged in successfully!', 'success')
-            return redirect(url_for('dashboard'))
+        if user:
+            # Check if account is locked
+            if user.is_locked():
+                minutes_locked = 30
+                if user.locked_at:
+                    time_remaining = timedelta(minutes=minutes_locked) - (
+                        datetime.utcnow() - user.locked_at
+                    )
+                    minutes_left = int(time_remaining.total_seconds() / 60)
+                    flash(
+                        f'Account is locked due to multiple failed login attempts. '
+                        f'Please try again in {minutes_left} minutes.',
+                        'error'
+                    )
+                else:
+                    flash('Account is locked. Please contact administrator.', 'error')
+                return render_template('login.html')
 
-        # fall through and show error message for invalid credentials
-        flash('Invalid username or password', 'error')
+            # Verify password
+            if user.check_password(password):
+                # Successful login
+                user.reset_failed_attempts()
+                login_user(user)
+                flash('Logged in successfully!', 'success')
+                return redirect(url_for('dashboard'))
+
+            # Failed login attempt
+            user.record_failed_login()
+            remaining_attempts = 3 - user.failed_login_attempts
+            
+            if user.account_locked:
+                flash(
+                    'Account locked due to multiple failed login attempts. '
+                    'Please try again after 30 minutes.',
+                    'error'
+                )
+            elif remaining_attempts > 0:
+                flash(
+                    f'Invalid password. {remaining_attempts} attempts remaining before account lock.',
+                    'error'
+                )
+            else:
+                flash('Invalid username or password', 'error')
+        else:
+            # User not found
+            flash('Invalid username or password', 'error')
 
     return render_template('login.html')
 
