@@ -8,10 +8,22 @@ This module provides attendance management endpoints with RBAC:
 These routes support both Flask-Login session auth and JWT token auth.
 """
 
+from datetime import datetime
 from flask import Blueprint, jsonify, request
 from flask_login import login_required, current_user
-from auth_middleware import jwt_role_required, jwt_required
-from rbac import require_role, get_user_role
+
+# pylint: disable=import-error,relative-beyond-top-level
+try:
+    from auth_middleware import jwt_role_required, jwt_required
+    from rbac import require_role, get_user_role
+    from models import db, Attendance
+except ImportError:
+    try:
+        from src.auth_middleware import jwt_role_required, jwt_required
+        from src.rbac import require_role, get_user_role
+        from src.models import db, Attendance
+    except ImportError:
+        pass  # Will fail gracefully if modules not found
 
 
 # Create Blueprint for attendance routes
@@ -207,30 +219,63 @@ def override_attendance():
             'message': 'Status must be either "present" or "absent"'
         }), 400
 
-    # In a real application, you would:
-    # 1. Fetch the existing attendance record
-    # 2. Store the old value for audit trail
-    # 3. Update the record with new status
-    # 4. Log the override action with admin details and reason
+    # Fetch the attendance record from database
+    attendance_record = db.session.get(Attendance, attendance_id)
 
-    # For this demo, we'll return a success response
-    return jsonify({
-        'success': True,
-        'message': 'Attendance record overridden successfully',
-        'overridden_by': {
-            'user_id': current_user.id,
-            'username': current_user.username,
-            'name': current_user.name,
-            'role': user_role
-        },
-        'override': {
-            'attendance_id': attendance_id,
-            'previous_status': 'absent',  # Mock data
-            'new_status': new_status,
-            'reason': reason,
-            'timestamp': '2025-11-08T10:35:00Z'
-        }
-    }), 200
+    if not attendance_record:
+        return jsonify({
+            'success': False,
+            'error': 'Attendance record not found',
+            'message': f'No attendance record found with ID {attendance_id}'
+        }), 404
+
+    # Store the previous status for audit trail
+    previous_status = 'present' if attendance_record.is_present else 'absent'
+
+    # Check if trying to set the same status
+    if previous_status == new_status:
+        return jsonify({
+            'success': False,
+            'error': 'No change needed',
+            'message': f'Attendance is already marked as {new_status}'
+        }), 400
+
+    # Update the attendance record
+    attendance_record.is_present = new_status == 'present'
+    attendance_record.is_overridden = True
+    attendance_record.override_reason = reason
+    attendance_record.overridden_by = current_user.id
+    attendance_record.override_timestamp = datetime.utcnow().isoformat()
+
+    try:
+        db.session.commit()
+
+        return jsonify({
+            'success': True,
+            'message': 'Attendance record overridden successfully',
+            'overridden_by': {
+                'user_id': current_user.id,
+                'username': current_user.username,
+                'name': current_user.name,
+                'role': user_role
+            },
+            'override': {
+                'attendance_id': attendance_id,
+                'student_id': attendance_record.student_id,
+                'date': attendance_record.date.isoformat(),
+                'previous_status': previous_status,
+                'new_status': new_status,
+                'reason': reason,
+                'timestamp': attendance_record.override_timestamp
+            }
+        }), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({
+            'success': False,
+            'error': 'Database error',
+            'message': f'Failed to save override: {str(e)}'
+        }), 500
 
 
 # ============================================================================
@@ -353,14 +398,59 @@ def api_override_attendance():
             'error': 'Missing required fields'
         }), 400
 
-    return jsonify({
-        'success': True,
-        'message': 'Attendance overridden via JWT',
-        'auth_method': 'JWT',
-        'overridden_by': jwt_user,
-        'override': {
-            'attendance_id': attendance_id,
-            'new_status': new_status,
-            'reason': reason
-        }
-    }), 200
+    if new_status not in ['present', 'absent']:
+        return jsonify({
+            'success': False,
+            'error': 'Invalid status',
+            'message': 'Status must be either "present" or "absent"'
+        }), 400
+
+    # Fetch the attendance record from database
+    attendance_record = db.session.get(Attendance, attendance_id)
+
+    if not attendance_record:
+        return jsonify({
+            'success': False,
+            'error': 'Attendance record not found'
+        }), 404
+
+    # Store previous status
+    previous_status = 'present' if attendance_record.is_present else 'absent'
+
+    if previous_status == new_status:
+        return jsonify({
+            'success': False,
+            'error': 'No change needed'
+        }), 400
+
+    # Update the attendance record
+    attendance_record.is_present = new_status == 'present'
+    attendance_record.is_overridden = True
+    attendance_record.override_reason = reason
+    attendance_record.overridden_by = jwt_user.get('user_id')
+    attendance_record.override_timestamp = datetime.utcnow().isoformat()
+
+    try:
+        db.session.commit()
+        return jsonify({
+            'success': True,
+            'message': 'Attendance overridden via JWT',
+            'auth_method': 'JWT',
+            'overridden_by': jwt_user,
+            'override': {
+                'attendance_id': attendance_id,
+                'student_id': attendance_record.student_id,
+                'date': attendance_record.date.isoformat(),
+                'previous_status': previous_status,
+                'new_status': new_status,
+                'reason': reason,
+                'timestamp': attendance_record.override_timestamp
+            }
+        }), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({
+            'success': False,
+            'error': 'Database error',
+            'message': str(e)
+        }), 500
