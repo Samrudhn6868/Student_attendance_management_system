@@ -19,25 +19,16 @@ from auth_middleware import jwt_role_required, jwt_required, get_token_from_head
 from rbac import require_role, get_user_role
 from models import db, Attendance, User
 
+# SAS-94: Import audit trail functions
+from audit_trail import (
+    log_attendance_creation,
+    log_attendance_update,
+    log_attendance_deletion
+)
+
 
 # Create Blueprint for attendance API
 attendance_api_bp = Blueprint('attendance_api', __name__, url_prefix='/api/attendance')
-
-
-def log_action(action_type, user, details):
-    """Placeholder function for audit trail logging (SAS-94).
-
-    This function will be implemented in SAS-94 to log all attendance
-    modifications for compliance and audit purposes.
-
-    Args:
-        action_type (str): Type of action ('submit', 'update', etc.)
-        user (dict): User information (username, role)
-        details (dict): Action details (what was changed, when, etc.)
-    """
-    # TODO: Implement in SAS-94
-    # This will log to a separate audit table or file
-    print(f"[AUDIT LOG] {action_type} by {user.get('username')}: {details}")
 
 
 def validate_attendance_data(data, require_id=False):
@@ -240,14 +231,8 @@ def submit_attendance():
         db.session.add(attendance)
         db.session.commit()
 
-        # Log action (SAS-94 placeholder)
-        log_action('submit', user_info, {
-            'attendance_id': attendance.id,
-            'student_srn': attendance.student_srn,
-            'course_id': attendance.course_id,
-            'date': str(attendance.date),
-            'status': attendance.status
-        })
+        # SAS-94: Log attendance creation in audit trail
+        log_attendance_creation(attendance, reason=data.get('reason'))
 
         return jsonify({
             'success': True,
@@ -332,8 +317,13 @@ def update_attendance():
             }), 404
 
         # Store old values for audit
-        old_status = attendance.status
-        old_marked_by = attendance.marked_by
+        old_values = {
+            'status': attendance.status,
+            'marked_by': attendance.marked_by,
+            'student_srn': attendance.student_srn,
+            'course_id': attendance.course_id,
+            'date': str(attendance.date)
+        }
 
         # Update fields if provided
         if 'status' in data and data['status']:
@@ -351,15 +341,8 @@ def update_attendance():
 
         db.session.commit()
 
-        # Log action (SAS-94 placeholder)
-        log_action('update', user_info, {
-            'attendance_id': attendance.id,
-            'old_status': old_status,
-            'new_status': attendance.status,
-            'old_marked_by': old_marked_by,
-            'new_marked_by': attendance.marked_by,
-            'reason': data.get('reason', 'No reason provided')
-        })
+        # SAS-94: Log attendance update in audit trail
+        log_attendance_update(attendance, old_values, reason=data.get('reason'))
 
         return jsonify({
             'success': True,
@@ -374,7 +357,7 @@ def update_attendance():
                 'updated_at': attendance.updated_at.isoformat()
             },
             'changes': {
-                'old_status': old_status,
+                'old_status': old_values['status'],
                 'new_status': attendance.status
             }
         }), 200
@@ -564,14 +547,8 @@ def jwt_submit_attendance():
         db.session.add(attendance)
         db.session.commit()
 
-        # Log action
-        log_action('submit_jwt', jwt_user, {
-            'attendance_id': attendance.id,
-            'student_srn': attendance.student_srn,
-            'course_id': attendance.course_id,
-            'date': str(attendance.date),
-            'status': attendance.status
-        })
+        # SAS-94: Log attendance creation in audit trail
+        log_attendance_creation(attendance, reason=data.get('reason'))
 
         return jsonify({
             'success': True,
@@ -641,9 +618,14 @@ def jwt_update_attendance():
                 'message': f"Attendance record {data['attendance_id']} not found"
             }), 404
 
-        # Store old values
-        old_status = attendance.status
-        # old_marked_by stored for future audit logging (SAS-94)
+        # Store old values for audit
+        old_values = {
+            'status': attendance.status,
+            'marked_by': attendance.marked_by,
+            'student_srn': attendance.student_srn,
+            'course_id': attendance.course_id,
+            'date': str(attendance.date)
+        }
 
         # Update fields
         if 'status' in data and data['status']:
@@ -659,13 +641,8 @@ def jwt_update_attendance():
 
         db.session.commit()
 
-        # Log action
-        log_action('update_jwt', jwt_user, {
-            'attendance_id': attendance.id,
-            'old_status': old_status,
-            'new_status': attendance.status,
-            'reason': data.get('reason', 'No reason provided')
-        })
+        # SAS-94: Log attendance update in audit trail
+        log_attendance_update(attendance, old_values, reason=data.get('reason'))
 
         return jsonify({
             'success': True,
@@ -681,7 +658,7 @@ def jwt_update_attendance():
                 'updated_at': attendance.updated_at.isoformat()
             },
             'changes': {
-                'old_status': old_status,
+                'old_status': old_values['status'],
                 'new_status': attendance.status
             }
         }), 200

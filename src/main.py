@@ -37,6 +37,9 @@ from auth_middleware import create_token_response
 # SAS-93: Import attendance API
 from attendance_api import attendance_api_bp
 
+# SAS-94: Import audit trail API
+from audit_api import audit_api
+
 # Load environment variables
 load_dotenv()
 
@@ -402,6 +405,10 @@ app.register_blueprint(attendance_bp)
 
 # SAS-93: Register attendance API routes
 app.register_blueprint(attendance_api_bp)
+
+# SAS-94: Register audit trail API (admin-only)
+app.register_blueprint(audit_api)
+
 # Create DB tables on import to support integration tests and local dev.
 # In production deployments, migrations should be used instead.
 with app.app_context():
