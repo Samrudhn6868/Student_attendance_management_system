@@ -2,9 +2,10 @@
 
 This module defines the SQLAlchemy models for user management and attendance tracking.
 """
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import UserMixin
+from werkzeug.security import generate_password_hash, check_password_hash
 
 db = SQLAlchemy()
 
@@ -34,6 +35,11 @@ class User(UserMixin, db.Model):
     name = db.Column(db.String(100), nullable=False)
     is_faculty = db.Column(db.Boolean, default=False)
     role = db.Column(db.String(20), nullable=False, default='student')
+
+    # Account locking fields
+    failed_login_attempts = db.Column(db.Integer, default=0)
+    account_locked = db.Column(db.Boolean, default=False)
+    locked_at = db.Column(db.DateTime, nullable=True)
 
     def __init__(self, user_id=None, name=None, is_faculty=False, **kwargs):
         """Initialize a new User.
@@ -73,6 +79,11 @@ class User(UserMixin, db.Model):
         if 'password_hash' in kwargs:
             self.password_hash = kwargs['password_hash']
 
+        # Initialize account locking fields
+        self.failed_login_attempts = kwargs.get('failed_login_attempts', 0)
+        self.account_locked = kwargs.get('account_locked', False)
+        self.locked_at = kwargs.get('locked_at', None)
+
     @property
     def user_id(self):
         """Legacy compatibility: user_id is an alias for id."""
@@ -86,6 +97,61 @@ class User(UserMixin, db.Model):
     def get_id(self):
         """Override UserMixin get_id to use id."""
         return str(self.id)
+
+    def set_password(self, password):
+        """Hash and set the user's password."""
+        self.password_hash = generate_password_hash(password)
+
+    def check_password(self, password):
+        """Return True if the given plaintext password matches the stored hash."""
+        return check_password_hash(self.password_hash, password)
+
+    def is_locked(self):
+        """Check if account is locked.
+        
+        Automatically unlocks if locked for more than 30 minutes.
+        """
+        if not self.account_locked:
+            return False
+        
+        # Auto-unlock after 30 minutes
+        if self.locked_at:
+            unlock_time = self.locked_at + timedelta(minutes=30)
+            if datetime.utcnow() >= unlock_time:
+                self.unlock_account()
+                return False
+        else:
+            # If locked_at is None but account is marked as locked, unlock it
+            self.unlock_account()
+            return False
+        
+        return True
+
+    def lock_account(self):
+        """Lock the account after too many failed attempts."""
+        self.account_locked = True
+        self.locked_at = datetime.utcnow()
+        db.session.commit()
+
+    def unlock_account(self):
+        """Unlock the account and reset failed attempts."""
+        self.account_locked = False
+        self.locked_at = None
+        self.failed_login_attempts = 0
+        db.session.commit()
+
+    def record_failed_login(self):
+        """Increment failed login attempts and lock if threshold reached."""
+        self.failed_login_attempts += 1
+        if self.failed_login_attempts >= 3:
+            self.lock_account()
+        else:
+            db.session.commit()
+
+    def reset_failed_attempts(self):
+        """Reset failed login attempts counter on successful login."""
+        self.failed_login_attempts = 0
+        db.session.commit()
 
 class Attendance(db.Model):
     """Attendance record model combining SAS-90 and SAS-93 features.
