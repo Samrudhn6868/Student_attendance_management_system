@@ -8,9 +8,20 @@ This module tests individual User model methods related to account locking:
 - reset_failed_attempts() - Reset counter on successful login
 """
 
+import os
+import sys
 import pytest
 from datetime import datetime, timedelta
 from unittest.mock import Mock, patch
+
+# Add src to sys.path so we can import application modules
+_HERE = os.path.dirname(__file__)
+_REPO_ROOT = os.path.abspath(os.path.join(_HERE, '..', '..'))
+_SRC_DIR = os.path.join(_REPO_ROOT, 'src')
+if _SRC_DIR not in sys.path:
+    sys.path.insert(0, _SRC_DIR)
+
+from models import User
 
 
 class TestUserAccountLockingMethods:
@@ -23,7 +34,6 @@ class TestUserAccountLockingMethods:
         user.locked_at = None
         
         # Import the actual User class to use its method
-        from src.models import User
         result = User.is_locked(user)
         
         assert result is False
@@ -34,7 +44,6 @@ class TestUserAccountLockingMethods:
         user.account_locked = True
         user.locked_at = datetime.utcnow() - timedelta(minutes=10)
         
-        from src.models import User
         result = User.is_locked(user)
         
         assert result is True
@@ -46,7 +55,6 @@ class TestUserAccountLockingMethods:
         user.locked_at = datetime.utcnow() - timedelta(minutes=31)
         user.unlock_account = Mock()
         
-        from src.models import User
         result = User.is_locked(user)
         
         assert result is False
@@ -59,7 +67,6 @@ class TestUserAccountLockingMethods:
         user.locked_at = None
         user.unlock_account = Mock()
         
-        from src.models import User
         result = User.is_locked(user)
         
         # If locked_at is None but account_locked is True, should unlock
@@ -68,13 +75,12 @@ class TestUserAccountLockingMethods:
     
     def test_lock_account_sets_fields_correctly(self):
         """Test lock_account() sets account_locked and locked_at."""
-        from src.models import User
         
         user = User(username='test', name='Test', is_faculty=False)
         user.account_locked = False
         user.locked_at = None
         
-        with patch('src.models.db.session.commit'):
+        with patch('models.db.session.commit'):
             user.lock_account()
         
         assert user.account_locked is True
@@ -83,14 +89,13 @@ class TestUserAccountLockingMethods:
     
     def test_unlock_account_resets_fields(self):
         """Test unlock_account() resets lock fields and failed attempts."""
-        from src.models import User
         
         user = User(username='test', name='Test', is_faculty=False)
         user.account_locked = True
         user.locked_at = datetime.utcnow()
         user.failed_login_attempts = 3
         
-        with patch('src.models.db.session.commit'):
+        with patch('models.db.session.commit'):
             user.unlock_account()
         
         assert user.account_locked is False
@@ -99,25 +104,23 @@ class TestUserAccountLockingMethods:
     
     def test_record_failed_login_increments_counter(self):
         """Test record_failed_login() increments failed_login_attempts."""
-        from src.models import User
         
         user = User(username='test', name='Test', is_faculty=False)
         user.failed_login_attempts = 0
         
-        with patch('src.models.db.session.commit'):
+        with patch('models.db.session.commit'):
             user.record_failed_login()
         
         assert user.failed_login_attempts == 1
     
     def test_record_failed_login_locks_at_three_attempts(self):
         """Test record_failed_login() locks account at 3rd attempt."""
-        from src.models import User
         
         user = User(username='test', name='Test', is_faculty=False)
         user.failed_login_attempts = 2
         user.lock_account = Mock()
         
-        with patch('src.models.db.session.commit'):
+        with patch('models.db.session.commit'):
             user.record_failed_login()
         
         assert user.failed_login_attempts == 3
@@ -125,13 +128,12 @@ class TestUserAccountLockingMethods:
     
     def test_record_failed_login_does_not_lock_before_three(self):
         """Test record_failed_login() doesn't lock before 3 attempts."""
-        from src.models import User
         
         user = User(username='test', name='Test', is_faculty=False)
         user.failed_login_attempts = 1
         user.lock_account = Mock()
         
-        with patch('src.models.db.session.commit'):
+        with patch('models.db.session.commit'):
             user.record_failed_login()
         
         assert user.failed_login_attempts == 2
@@ -139,24 +141,22 @@ class TestUserAccountLockingMethods:
     
     def test_reset_failed_attempts_sets_to_zero(self):
         """Test reset_failed_attempts() resets counter to 0."""
-        from src.models import User
         
         user = User(username='test', name='Test', is_faculty=False)
         user.failed_login_attempts = 2
         
-        with patch('src.models.db.session.commit'):
+        with patch('models.db.session.commit'):
             user.reset_failed_attempts()
         
         assert user.failed_login_attempts == 0
     
     def test_reset_failed_attempts_works_when_already_zero(self):
         """Test reset_failed_attempts() is safe when already 0."""
-        from src.models import User
         
         user = User(username='test', name='Test', is_faculty=False)
         user.failed_login_attempts = 0
         
-        with patch('src.models.db.session.commit'):
+        with patch('models.db.session.commit'):
             user.reset_failed_attempts()
         
         assert user.failed_login_attempts == 0
@@ -167,12 +167,11 @@ class TestAccountLockingThresholds:
     
     def test_exactly_three_attempts_triggers_lock(self):
         """Test that exactly 3 failed attempts triggers lock."""
-        from src.models import User
         
         user = User(username='test', name='Test', is_faculty=False)
         user.failed_login_attempts = 0
         
-        with patch('src.models.db.session.commit'):
+        with patch('models.db.session.commit'):
             user.record_failed_login()  # 1
             assert user.account_locked is False
             
@@ -184,7 +183,6 @@ class TestAccountLockingThresholds:
     
     def test_lock_timeout_is_exactly_30_minutes(self):
         """Test auto-unlock happens at exactly 30 minutes."""
-        from src.models import User
         
         user = User(username='test', name='Test', is_faculty=False)
         user.account_locked = True
@@ -197,18 +195,17 @@ class TestAccountLockingThresholds:
         user.account_locked = True  # Reset for next test
         user.locked_at = datetime.utcnow() - timedelta(minutes=30, seconds=1)
         
-        with patch('src.models.db.session.commit'):
+        with patch('models.db.session.commit'):
             result = user.is_locked()
         
         assert result is False
     
     def test_multiple_lock_unlock_cycles(self):
         """Test account can be locked and unlocked multiple times."""
-        from src.models import User
         
         user = User(username='test', name='Test', is_faculty=False)
         
-        with patch('src.models.db.session.commit'):
+        with patch('models.db.session.commit'):
             # First cycle
             user.record_failed_login()
             user.record_failed_login()
@@ -233,11 +230,10 @@ class TestAccountLockingEdgeCases:
     
     def test_lock_account_idempotent(self):
         """Test locking an already locked account is safe."""
-        from src.models import User
         
         user = User(username='test', name='Test', is_faculty=False)
         
-        with patch('src.models.db.session.commit'):
+        with patch('models.db.session.commit'):
             user.lock_account()
             first_locked_at = user.locked_at
             
@@ -251,12 +247,11 @@ class TestAccountLockingEdgeCases:
     
     def test_unlock_account_idempotent(self):
         """Test unlocking an already unlocked account is safe."""
-        from src.models import User
         
         user = User(username='test', name='Test', is_faculty=False)
         user.account_locked = False
         
-        with patch('src.models.db.session.commit'):
+        with patch('models.db.session.commit'):
             user.unlock_account()
         
         assert user.account_locked is False
@@ -265,19 +260,17 @@ class TestAccountLockingEdgeCases:
     
     def test_failed_attempts_do_not_go_negative(self):
         """Test failed_login_attempts cannot go negative."""
-        from src.models import User
         
         user = User(username='test', name='Test', is_faculty=False)
         user.failed_login_attempts = 0
         
-        with patch('src.models.db.session.commit'):
+        with patch('models.db.session.commit'):
             user.reset_failed_attempts()
         
         assert user.failed_login_attempts == 0
     
     def test_is_locked_with_future_locked_at(self):
         """Test is_locked() handles future locked_at timestamp."""
-        from src.models import User
         
         user = User(username='test', name='Test', is_faculty=False)
         user.account_locked = True
@@ -288,13 +281,12 @@ class TestAccountLockingEdgeCases:
     
     def test_password_check_independent_of_lock_state(self):
         """Test password checking works regardless of lock state."""
-        from src.models import User
         
         user = User(username='test', name='Test', is_faculty=False)
         user.set_password('test123')
         
         # Lock the account
-        with patch('src.models.db.session.commit'):
+        with patch('models.db.session.commit'):
             user.lock_account()
         
         # Password check should still work

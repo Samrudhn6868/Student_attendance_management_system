@@ -7,11 +7,20 @@ This module contains tests for teacher attendance marking feature, including:
 # pylint: disable=redefined-outer-name
 # ^ Disabled because pytest fixtures are meant to be used this way
 import os
+import sys
 import pytest
 from flask import Flask
 from flask_login import LoginManager
-from src.attendance.views import attendance_bp
-from src.models import Attendance, User, db
+
+# Add src to sys.path so we can import application modules
+_HERE = os.path.dirname(__file__)
+_REPO_ROOT = os.path.abspath(os.path.join(_HERE, '..', '..'))
+_SRC_DIR = os.path.join(_REPO_ROOT, 'src')
+if _SRC_DIR not in sys.path:
+    sys.path.insert(0, _SRC_DIR)
+
+from attendance.views import attendance_bp
+from models import Attendance, User, db
 
 
 class MockUser:
@@ -55,7 +64,7 @@ class MockUser:
 def test_app():
     """Create Flask application for testing."""
     template_path = os.path.abspath(os.path.join(
-        os.path.dirname(__file__), '..', 'src', 'templates'))
+        os.path.dirname(__file__), '..', '..', 'src', 'templates'))
     app = Flask(__name__, template_folder=template_path)
     app.config.update(
         TESTING=True,
