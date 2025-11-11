@@ -402,9 +402,10 @@ app.register_blueprint(attendance_bp)
 
 # SAS-93: Register attendance API routes
 app.register_blueprint(attendance_api_bp)
+# Create DB tables on import to support integration tests and local dev.
+# In production deployments, migrations should be used instead.
+with app.app_context():
+    db.create_all()
 
 if __name__ == '__main__':
-    with app.app_context():
-        db.create_all()
-
     app.run(debug=True)
