@@ -19,13 +19,17 @@ from flask import Flask
 from flask_login import LoginManager, login_user
 from werkzeug.security import generate_password_hash
 
-# Add parent directory to path to import src modules
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+# Add parent directory and src to path to import src modules
+_HERE = os.path.dirname(__file__)
+_REPO_ROOT = os.path.abspath(os.path.join(_HERE, '..', '..'))
+_SRC_DIR = os.path.join(_REPO_ROOT, 'src')
+if _SRC_DIR not in sys.path:
+    sys.path.insert(0, _SRC_DIR)
 
-from src.attendance_routes import attendance_bp
-from src.models import Attendance, User, db
-from src.auth_middleware import create_token_response
-from src.rbac import require_role
+from attendance_routes import attendance_bp
+from models import Attendance, User, db
+from auth_middleware import create_token_response
+from rbac import require_role
 
 
 class MockUser:
@@ -73,14 +77,15 @@ class MockUser:
 def test_app():
     """Create Flask application for testing."""
     template_path = os.path.abspath(os.path.join(
-        os.path.dirname(__file__), '..', 'src', 'templates'))
+        os.path.dirname(__file__), '..', '..', 'src', 'templates'))
     
     app = Flask(__name__, template_folder=template_path)
     app.config.update(
         TESTING=True,
         SQLALCHEMY_DATABASE_URI='sqlite:///:memory:',
         SECRET_KEY='test-secret-key',
-        WTF_CSRF_ENABLED=False
+        WTF_CSRF_ENABLED=False,
+        SQLALCHEMY_TRACK_MODIFICATIONS=False
     )
     
     db.init_app(app)
@@ -88,7 +93,7 @@ def test_app():
     
     @login_manager.user_loader
     def load_user(user_id):
-        return User.query.get(int(user_id))
+        return db.session.get(User, int(user_id))
     
     app.register_blueprint(attendance_bp)
     
@@ -109,33 +114,36 @@ def client(test_app):
 def test_admin(test_app):
     """Create test admin user in database."""
     with test_app.app_context():
-        admin = User(user_id=1, name='Admin User', is_faculty=True)
+        admin = User(user_id=1, name='Admin User', is_faculty=True, username='admin')
         admin.role = 'admin'
         db.session.add(admin)
         db.session.commit()
-        return admin
+        admin_id = admin.id
+    return admin_id
 
 
 @pytest.fixture
 def test_teacher(test_app):
     """Create test teacher user in database."""
     with test_app.app_context():
-        teacher = User(user_id=2, name='Teacher User', is_faculty=True)
+        teacher = User(user_id=2, name='Teacher User', is_faculty=True, username='teacher')
         teacher.role = 'teacher'
         db.session.add(teacher)
         db.session.commit()
-        return teacher
+        teacher_id = teacher.id
+    return teacher_id
 
 
 @pytest.fixture
 def test_student(test_app):
     """Create test student user in database."""
     with test_app.app_context():
-        student = User(user_id=3, name='Student User', is_faculty=False)
+        student = User(user_id=3, name='Student User', is_faculty=False, username='student')
         student.role = 'student'
         db.session.add(student)
         db.session.commit()
-        return student
+        student_id = student.id
+    return student_id
 
 
 @pytest.fixture
@@ -143,7 +151,7 @@ def test_attendance_record(test_app, test_student):
     """Create test attendance record in database."""
     with test_app.app_context():
         attendance = Attendance(
-            student_id=test_student.user_id,
+            student_id=test_student,
             date=date.today(),
             is_present=False
         )
@@ -158,9 +166,9 @@ def mock_admin_login(test_app, test_admin):
     """Mock admin login for testing."""
     with test_app.test_request_context():
         mock_admin = MockUser(
-            test_admin.user_id, 
+            test_admin, 
             'ADMIN001', 
-            test_admin.name, 
+            'Admin User', 
             True, 
             'admin'
         )
@@ -173,9 +181,9 @@ def mock_teacher_login(test_app, test_teacher):
     """Mock teacher login for testing."""
     with test_app.test_request_context():
         mock_teacher = MockUser(
-            test_teacher.user_id,
+            test_teacher,
             'TEACHER001',
-            test_teacher.name,
+            'Teacher User',
             True,
             'teacher'
         )
@@ -188,9 +196,9 @@ def mock_student_login(test_app, test_student):
     """Mock student login for testing."""
     with test_app.test_request_context():
         mock_student = MockUser(
-            test_student.user_id,
+            test_student,
             'PES1UG23CS001',
-            test_student.name,
+            'Student User',
             False,
             'student'
         )
@@ -204,12 +212,12 @@ class TestAdminOverrideAttendance:
     def test_admin_override_success(self, client, test_app, test_admin, test_attendance_record):
         """Test that admin can successfully override attendance with reason."""
         with client.session_transaction() as sess:
-            sess['_user_id'] = str(test_admin.user_id)
+            sess['_user_id'] = str(test_admin)
         
         with test_app.app_context():
             # Mock current_user
             from flask_login import current_user
-            mock_admin = MockUser(test_admin.user_id, 'ADMIN001', test_admin.name, True, 'admin')
+            mock_admin = MockUser(test_admin, 'ADMIN001', 'Admin User', True, 'admin')
             
             # Prepare override data
             override_data = {
@@ -224,9 +232,9 @@ class TestAdminOverrideAttendance:
                 data=json.dumps(override_data),
                 content_type='application/json',
                 headers={'X-Mock-User': json.dumps({
-                    'user_id': test_admin.user_id,
+                    'user_id': test_admin,
                     'username': 'ADMIN001',
-                    'name': test_admin.name,
+                    'name': 'Admin User',
                     'role': 'admin'
                 })}
             )
@@ -241,18 +249,18 @@ class TestAdminOverrideAttendance:
                 assert 'Attendance record overridden successfully' in data['message']
                 
                 # Check database
-                attendance = Attendance.query.get(test_attendance_record)
+                attendance = db.session.get(Attendance, test_attendance_record)
                 assert attendance is not None
                 assert attendance.is_present is True
                 assert attendance.is_overridden is True
                 assert attendance.override_reason == override_data['reason']
-                assert attendance.overridden_by == test_admin.user_id
+                assert attendance.overridden_by == test_admin
 
 
     def test_override_missing_fields(self, client, test_app, test_admin):
         """Test override fails when required fields are missing."""
         with client.session_transaction() as sess:
-            sess['_user_id'] = str(test_admin.user_id)
+            sess['_user_id'] = str(test_admin)
         
         # Test missing attendance_id
         response = client.put(
@@ -271,7 +279,7 @@ class TestAdminOverrideAttendance:
     def test_override_invalid_status(self, client, test_app, test_admin, test_attendance_record):
         """Test override fails with invalid status value."""
         with client.session_transaction() as sess:
-            sess['_user_id'] = str(test_admin.user_id)
+            sess['_user_id'] = str(test_admin)
         
         override_data = {
             'attendance_id': test_attendance_record,
@@ -292,7 +300,7 @@ class TestAdminOverrideAttendance:
     def test_override_nonexistent_record(self, client, test_app, test_admin):
         """Test override fails for non-existent attendance record."""
         with client.session_transaction() as sess:
-            sess['_user_id'] = str(test_admin.user_id)
+            sess['_user_id'] = str(test_admin)
         
         override_data = {
             'attendance_id': 99999,  # Non-existent ID
@@ -313,7 +321,7 @@ class TestAdminOverrideAttendance:
     def test_override_same_status(self, client, test_app, test_admin):
         """Test override fails when trying to set the same status."""
         with client.session_transaction() as sess:
-            sess['_user_id'] = str(test_admin.user_id)
+            sess['_user_id'] = str(test_admin)
         
         with test_app.app_context():
             # Create attendance with present status
@@ -345,7 +353,7 @@ class TestAdminOverrideAttendance:
     def test_teacher_cannot_override(self, client, test_app, test_teacher, test_attendance_record):
         """Test that teacher cannot override attendance."""
         with client.session_transaction() as sess:
-            sess['_user_id'] = str(test_teacher.user_id)
+            sess['_user_id'] = str(test_teacher)
         
         override_data = {
             'attendance_id': test_attendance_record,
@@ -366,7 +374,7 @@ class TestAdminOverrideAttendance:
     def test_student_cannot_override(self, client, test_app, test_student, test_attendance_record):
         """Test that student cannot override attendance."""
         with client.session_transaction() as sess:
-            sess['_user_id'] = str(test_student.user_id)
+            sess['_user_id'] = str(test_student)
         
         override_data = {
             'attendance_id': test_attendance_record,
@@ -388,23 +396,23 @@ class TestAdminOverrideAttendance:
         """Test that override creates proper audit trail."""
         with test_app.app_context():
             # Get original attendance
-            attendance = Attendance.query.get(test_attendance_record)
+            attendance = db.session.get(Attendance, test_attendance_record)
             original_status = attendance.is_present
             
             # Perform override
             attendance.is_present = not original_status
             attendance.is_overridden = True
             attendance.override_reason = 'Administrative correction'
-            attendance.overridden_by = test_admin.user_id
+            attendance.overridden_by = test_admin
             attendance.override_timestamp = datetime.utcnow().isoformat()
             
             db.session.commit()
             
             # Verify audit trail
-            updated_attendance = Attendance.query.get(test_attendance_record)
+            updated_attendance = db.session.get(Attendance, test_attendance_record)
             assert updated_attendance.is_overridden is True
             assert updated_attendance.override_reason == 'Administrative correction'
-            assert updated_attendance.overridden_by == test_admin.user_id
+            assert updated_attendance.overridden_by == test_admin
             assert updated_attendance.override_timestamp is not None
 
 
@@ -474,7 +482,7 @@ class TestAdminOverrideAttendance:
             attendance.is_present = False
             attendance.is_overridden = True
             attendance.override_reason = 'First override'
-            attendance.overridden_by = test_admin.user_id
+            attendance.overridden_by = test_admin
             attendance.override_timestamp = datetime.utcnow().isoformat()
             db.session.commit()
             
@@ -487,7 +495,7 @@ class TestAdminOverrideAttendance:
             db.session.commit()
             
             # Verify final state
-            final_attendance = Attendance.query.get(attendance_id)
+            final_attendance = db.session.get(Attendance, attendance_id)
             assert final_attendance.is_present is True
             assert final_attendance.is_overridden is True
             assert final_attendance.override_reason == 'Second override'
@@ -510,12 +518,12 @@ class TestAdminOverrideAttendance:
             attendance.is_present = True
             attendance.is_overridden = True
             attendance.override_reason = special_reason
-            attendance.overridden_by = test_admin.user_id
+            attendance.overridden_by = test_admin
             attendance.override_timestamp = datetime.utcnow().isoformat()
             db.session.commit()
             
             # Verify
-            updated = Attendance.query.get(attendance.id)
+            updated = db.session.get(Attendance, attendance.id)
             assert updated.override_reason == special_reason
 
 
@@ -536,12 +544,12 @@ class TestAdminOverrideAttendance:
             attendance.is_present = True
             attendance.is_overridden = True
             attendance.override_reason = long_reason
-            attendance.overridden_by = test_admin.user_id
+            attendance.overridden_by = test_admin
             attendance.override_timestamp = datetime.utcnow().isoformat()
             db.session.commit()
             
             # Verify
-            updated = Attendance.query.get(attendance.id)
+            updated = db.session.get(Attendance, attendance.id)
             assert updated.override_reason == long_reason
             assert len(updated.override_reason) == 500
 
