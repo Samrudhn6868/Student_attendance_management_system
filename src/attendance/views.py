@@ -1,8 +1,8 @@
 from flask import Blueprint, request, render_template, redirect, url_for, flash
 from flask_login import login_required, current_user
 from datetime import date
-from src.models import User, Attendance, db  # Adjust import as needed
-from src.rbac import require_role
+from models import User, Attendance, db  # Adjust import as needed
+from rbac import require_role
 
 attendance_bp = Blueprint('attendance', __name__)
 
