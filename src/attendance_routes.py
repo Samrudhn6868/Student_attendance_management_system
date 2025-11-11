@@ -34,7 +34,7 @@ def view_attendance():
     Teachers and admins can view all attendance.
 
     Returns:
-        JSON response with attendance data
+        HTML page with attendance data or JSON for API requests
     """
     user_role = get_user_role()
 
@@ -52,12 +52,16 @@ def view_attendance():
                 {'date': '2025-11-02', 'status': 'present', 'subject': 'Physics'},
                 {'date': '2025-11-03', 'status': 'absent', 'subject': 'Chemistry'},
                 {'date': '2025-11-04', 'status': 'present', 'subject': 'English'},
+                {'date': '2025-11-05', 'status': 'present', 'subject': 'Mathematics'},
+                {'date': '2025-11-06', 'status': 'present', 'subject': 'Physics'},
+                {'date': '2025-11-07', 'status': 'present', 'subject': 'Chemistry'},
+                {'date': '2025-11-08', 'status': 'present', 'subject': 'English'},
             ],
             'summary': {
-                'total_classes': 4,
-                'present': 3,
+                'total_classes': 8,
+                'present': 7,
                 'absent': 1,
-                'percentage': 75.0
+                'percentage': 87.5
             }
         }
     else:
@@ -81,20 +85,40 @@ def view_attendance():
                     'username': 'PES1UG23CS003',
                     'name': 'Student Three',
                     'percentage': 78.0
+                },
+                {
+                    'user_id': 4,
+                    'username': 'PES1UG23CS004',
+                    'name': 'Student Four',
+                    'percentage': 55.0
+                },
+                {
+                    'user_id': 5,
+                    'username': 'PES1UG23CS005',
+                    'name': 'Student Five',
+                    'percentage': 92.0
                 }
             ],
             'summary': {
-                'total_students': 3,
-                'average_attendance': 84.3
+                'total_students': 5,
+                'average_attendance': 80.0
             }
         }
 
-    return jsonify({
-        'success': True,
-        'message': 'Attendance records retrieved successfully',
-        'role': user_role,
-        'data': attendance_data
-    }), 200
+    # If request wants JSON (API call), return JSON
+    if request.accept_mimetypes.accept_json and not request.accept_mimetypes.accept_html:
+        return jsonify({
+            'success': True,
+            'message': 'Attendance records retrieved successfully',
+            'role': user_role,
+            'data': attendance_data
+        }), 200
+    
+    # Otherwise render HTML template
+    return render_template('view_attendance.html', 
+                         role=user_role,
+                         data=attendance_data,
+                         current_user=current_user)
 
 
 @attendance_bp.route('/mark', methods=['GET', 'POST'])
