@@ -38,7 +38,7 @@ def test_app():
     
     @login_manager.user_loader
     def load_user(user_id):
-        return User.query.get(int(user_id))
+        return db.session.get(User, int(user_id))
     
     # Create tables
     with app.app_context():
@@ -130,8 +130,8 @@ class TestUserModelPasswordHashing:
         # Clear session
         db.session.expunge_all()
         
-        # Retrieve user
-        retrieved_user = User.query.get(user_id)
+        # Retrieve user using SQLAlchemy 2.0 API
+        retrieved_user = db.session.get(User, user_id)
         
         # Password should still verify
         assert retrieved_user.check_password('PersistTest123!') is True
