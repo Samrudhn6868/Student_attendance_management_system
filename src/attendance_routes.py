@@ -9,7 +9,7 @@ These routes support both Flask-Login session auth and JWT token auth.
 """
 
 from datetime import datetime
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, request, render_template, redirect, url_for, flash
 from flask_login import login_required, current_user
 
 # Import RBAC and auth components
@@ -34,7 +34,7 @@ def view_attendance():
     Teachers and admins can view all attendance.
 
     Returns:
-        JSON response with attendance data
+        HTML page with attendance data or JSON for API requests
     """
     user_role = get_user_role()
 
@@ -52,12 +52,16 @@ def view_attendance():
                 {'date': '2025-11-02', 'status': 'present', 'subject': 'Physics'},
                 {'date': '2025-11-03', 'status': 'absent', 'subject': 'Chemistry'},
                 {'date': '2025-11-04', 'status': 'present', 'subject': 'English'},
+                {'date': '2025-11-05', 'status': 'present', 'subject': 'Mathematics'},
+                {'date': '2025-11-06', 'status': 'present', 'subject': 'Physics'},
+                {'date': '2025-11-07', 'status': 'present', 'subject': 'Chemistry'},
+                {'date': '2025-11-08', 'status': 'present', 'subject': 'English'},
             ],
             'summary': {
-                'total_classes': 4,
-                'present': 3,
+                'total_classes': 8,
+                'present': 7,
                 'absent': 1,
-                'percentage': 75.0
+                'percentage': 87.5
             }
         }
     else:
@@ -81,29 +85,52 @@ def view_attendance():
                     'username': 'PES1UG23CS003',
                     'name': 'Student Three',
                     'percentage': 78.0
+                },
+                {
+                    'user_id': 4,
+                    'username': 'PES1UG23CS004',
+                    'name': 'Student Four',
+                    'percentage': 55.0
+                },
+                {
+                    'user_id': 5,
+                    'username': 'PES1UG23CS005',
+                    'name': 'Student Five',
+                    'percentage': 92.0
                 }
             ],
             'summary': {
-                'total_students': 3,
-                'average_attendance': 84.3
+                'total_students': 5,
+                'average_attendance': 80.0
             }
         }
 
-    return jsonify({
-        'success': True,
-        'message': 'Attendance records retrieved successfully',
-        'role': user_role,
-        'data': attendance_data
-    }), 200
+    # If request wants JSON (API call), return JSON
+    if request.accept_mimetypes.accept_json and not request.accept_mimetypes.accept_html:
+        return jsonify({
+            'success': True,
+            'message': 'Attendance records retrieved successfully',
+            'role': user_role,
+            'data': attendance_data
+        }), 200
+    
+    # Otherwise render HTML template
+    return render_template('view_attendance.html', 
+                         role=user_role,
+                         data=attendance_data,
+                         current_user=current_user)
 
 
-@attendance_bp.route('/mark', methods=['POST'])
+@attendance_bp.route('/mark', methods=['GET', 'POST'])
 @login_required
 @require_role('teacher', 'admin')
 def mark_attendance():
     """Mark attendance for students.
 
     Accessible by: teacher, admin
+    
+    GET: Display the attendance marking form
+    POST: Process attendance submission
 
     Expected JSON payload:
     {
@@ -116,9 +143,28 @@ def mark_attendance():
     Returns:
         JSON response confirming attendance was marked
     """
+    # If GET request, show the form
+    if request.method == 'GET':
+        # Sample students for demo - in production, fetch from database
+        sample_students = [
+            {'id': 1, 'name': 'Student User', 'srn': 'PES1UG21CS001'},
+            {'id': 2, 'name': 'Sample Student 2', 'srn': 'PES1UG21CS002'},
+            {'id': 3, 'name': 'Sample Student 3', 'srn': 'PES1UG21CS003'},
+        ]
+        return render_template('mark_attendance.html', 
+                             today=datetime.now().strftime('%Y-%m-%d'),
+                             students=sample_students)
+    
     user_role = get_user_role()
 
-    # Get request data
+    # Handle form submission (from web form)
+    if request.form:
+        absentees = request.form.getlist('absentees')
+        # In production, save to database here
+        flash(f'Attendance marked successfully! {len(absentees)} student(s) marked absent.', 'success')
+        return redirect(url_for('attendance.mark_attendance'))
+    
+    # Handle JSON API requests
     data = request.get_json() or {}
 
     student_id = data.get('student_id')
