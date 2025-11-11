@@ -5,10 +5,16 @@ This module defines the SQLAlchemy models for user management and attendance tra
 from datetime import date, datetime, timedelta
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import UserMixin
-from werkzeug.security import generate_password_hash, check_password_hash
 
 # SAS-86: Import password security functions
-from password_security import hash_password, verify_password
+from password_security import (
+    hash_password,
+    verify_password,
+    generate_password_hash,
+    check_password_hash,
+    upgrade_password_hash,
+    needs_rehash
+)
 
 db = SQLAlchemy()
 
@@ -123,11 +129,31 @@ class User(UserMixin, db.Model):
         return verify_password(password, self.password_hash)
 
     def set_password(self, password):
-        """Hash and set the user's password."""
-        self.password_hash = generate_password_hash(password)
+        """Hash and set the user's password.
+        
+        Args:
+            password: Plaintext password to hash and store
+            
+        Note:
+            Empty passwords are allowed but will never validate during login
+        """
+        if not password:
+            # Set a special marker that will never match any password
+            self.password_hash = "INVALID_EMPTY_PASSWORD"
+        else:
+            self.password_hash = generate_password_hash(password)
 
     def check_password(self, password):
-        """Return True if the given plaintext password matches the stored hash."""
+        """Return True if the given plaintext password matches the stored hash.
+        
+        Args:
+            password: Plaintext password to verify
+            
+        Returns:
+            bool: True if password matches, False otherwise
+        """
+        if not password or not self.password_hash:
+            return False
         return check_password_hash(self.password_hash, password)
 
     def is_locked(self):
