@@ -9,7 +9,7 @@ These routes support both Flask-Login session auth and JWT token auth.
 """
 
 from datetime import datetime
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, request, render_template, redirect, url_for, flash
 from flask_login import login_required, current_user
 
 # Import RBAC and auth components
@@ -97,13 +97,16 @@ def view_attendance():
     }), 200
 
 
-@attendance_bp.route('/mark', methods=['POST'])
+@attendance_bp.route('/mark', methods=['GET', 'POST'])
 @login_required
 @require_role('teacher', 'admin')
 def mark_attendance():
     """Mark attendance for students.
 
     Accessible by: teacher, admin
+    
+    GET: Display the attendance marking form
+    POST: Process attendance submission
 
     Expected JSON payload:
     {
@@ -116,9 +119,28 @@ def mark_attendance():
     Returns:
         JSON response confirming attendance was marked
     """
+    # If GET request, show the form
+    if request.method == 'GET':
+        # Sample students for demo - in production, fetch from database
+        sample_students = [
+            {'id': 1, 'name': 'Student User', 'srn': 'PES1UG21CS001'},
+            {'id': 2, 'name': 'Sample Student 2', 'srn': 'PES1UG21CS002'},
+            {'id': 3, 'name': 'Sample Student 3', 'srn': 'PES1UG21CS003'},
+        ]
+        return render_template('mark_attendance.html', 
+                             today=datetime.now().strftime('%Y-%m-%d'),
+                             students=sample_students)
+    
     user_role = get_user_role()
 
-    # Get request data
+    # Handle form submission (from web form)
+    if request.form:
+        absentees = request.form.getlist('absentees')
+        # In production, save to database here
+        flash(f'Attendance marked successfully! {len(absentees)} student(s) marked absent.', 'success')
+        return redirect(url_for('attendance.mark_attendance'))
+    
+    # Handle JSON API requests
     data = request.get_json() or {}
 
     student_id = data.get('student_id')
