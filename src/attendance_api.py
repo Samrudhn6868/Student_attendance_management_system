@@ -106,6 +106,64 @@ def get_current_user_info():
     return None
 
 
+def _mask_value(val: str, keep_start: int = 3, keep_end: int = 3) -> str:
+    """Mask middle of a value, keeping start and end characters visible.
+
+    Example: PES1UG23CS001 -> PES*******001
+    """
+    if not val:
+        return val
+    if len(val) <= (keep_start + keep_end):
+        return '*' * len(val)
+    return val[:keep_start] + ('*' * (len(val) - keep_start - keep_end)) + val[-keep_end:]
+
+
+def _format_record_for_view(record, viewer_info: dict):
+    """Format a single Attendance record for API response.
+
+    Applies role-based masking for student viewers: students can view full
+    details for their own records but see masked/limited data for others.
+    Teachers and admins receive fully decrypted fields.
+    """
+    # Decrypted values are exposed via model hybrid properties
+    student_plain = record.student_srn
+    course_plain = record.course_id
+    status_plain = record.status
+    marked_by_plain = record.marked_by
+
+    if viewer_info and viewer_info.get('role') == 'student':
+        viewer_username = viewer_info.get('username')
+        # If the student is viewing their own records, show full details.
+        if student_plain and viewer_username and student_plain == viewer_username:
+            student_val = student_plain
+            course_val = course_plain
+            status_val = status_plain
+            marked_by_val = marked_by_plain
+        else:
+            # Mask sensitive fields for other students
+            student_val = _mask_value(student_plain)
+            course_val = _mask_value(course_plain)
+            status_val = status_plain if status_plain else None
+            # Do not expose who marked attendance to students for privacy
+            marked_by_val = None
+    else:
+        # Teachers and admins see full decrypted values
+        student_val = student_plain
+        course_val = course_plain
+        status_val = status_plain
+        marked_by_val = marked_by_plain
+
+    return {
+        'id': record.id,
+        'student_srn': student_val,
+        'course_id': course_val,
+        'date': str(record.date) if record.date else None,
+        'status': status_val,
+        'marked_by': marked_by_val,
+        'updated_at': record.updated_at.isoformat() if record.updated_at else None
+    }
+
+
 # ============================================================================
 # Session-based endpoints (Flask-Login)
 # ============================================================================
@@ -426,16 +484,8 @@ def view_attendance():
         # Execute query
         records = query.order_by(Attendance.date.desc()).all()
 
-        # Format results
-        attendance_list = [{
-            'id': record.id,
-            'student_srn': record.student_srn,
-            'course_id': record.course_id,
-            'date': str(record.date) if record.date else None,
-            'status': record.status,
-            'marked_by': record.marked_by,
-            'updated_at': record.updated_at.isoformat() if record.updated_at else None
-        } for record in records]
+        # Format results with role-aware masking
+        attendance_list = [_format_record_for_view(record, user_info) for record in records]
 
         return jsonify({
             'success': True,
@@ -715,16 +765,8 @@ def jwt_view_attendance():
         # Execute query
         records = query.order_by(Attendance.date.desc()).all()
 
-        # Format results
-        attendance_list = [{
-            'id': record.id,
-            'student_srn': record.student_srn,
-            'course_id': record.course_id,
-            'date': str(record.date) if record.date else None,
-            'status': record.status,
-            'marked_by': record.marked_by,
-            'updated_at': record.updated_at.isoformat() if record.updated_at else None
-        } for record in records]
+        # Format results with role-aware masking
+        attendance_list = [_format_record_for_view(record, {'role': user_role, 'username': jwt_user.get('username')}) for record in records]
 
         return jsonify({
             'success': True,
