@@ -12,14 +12,16 @@ Features:
 
 import re
 from typing import Optional, Tuple
+
+# Import werkzeug for fallback and backward compatibility
+from werkzeug.security import generate_password_hash as werkzeug_hash
+from werkzeug.security import check_password_hash as werkzeug_check
+
 try:
     import bcrypt
     BCRYPT_AVAILABLE = True
 except ImportError:
     BCRYPT_AVAILABLE = False
-    # Fallback to werkzeug if bcrypt is not available
-    from werkzeug.security import generate_password_hash as werkzeug_hash
-    from werkzeug.security import check_password_hash as werkzeug_check
 
 
 # Password policy constants
@@ -113,6 +115,12 @@ def hash_password(password: str, validate_strength: bool = False) -> str:
     if BCRYPT_AVAILABLE:
         # Use bcrypt for strong password hashing
         password_bytes = password.encode('utf-8')
+        
+        # Bcrypt has a 72-byte limit, truncate if necessary
+        # This is safe because we're still hashing a long, random-looking string
+        if len(password_bytes) > 72:
+            password_bytes = password_bytes[:72]
+        
         salt = bcrypt.gensalt(rounds=BCRYPT_ROUNDS)
         hashed = bcrypt.hashpw(password_bytes, salt)
         return hashed.decode('utf-8')
@@ -148,10 +156,15 @@ def verify_password(password: str, password_hash: str) -> bool:
         # Try bcrypt first
         if BCRYPT_AVAILABLE and password_hash.startswith(('$2a$', '$2b$', '$2y$')):
             password_bytes = password.encode('utf-8')
+            
+            # Bcrypt has a 72-byte limit, truncate to match hashing behavior
+            if len(password_bytes) > 72:
+                password_bytes = password_bytes[:72]
+            
             hash_bytes = password_hash.encode('utf-8')
             return bcrypt.checkpw(password_bytes, hash_bytes)
         else:
-            # Try werkzeug format (PBKDF2)
+            # Try werkzeug format (PBKDF2, scrypt, etc.)
             return werkzeug_check(password_hash, password)
     except (ValueError, TypeError):
         # Invalid hash format
