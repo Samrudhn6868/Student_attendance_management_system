@@ -6,6 +6,9 @@ from datetime import date, datetime, timedelta
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import UserMixin
 
+# Encryption utilities (SAS-92)
+from encryption_utils import encrypt_data, decrypt_data, hash_value
+
 # SAS-86: Import password security functions
 from password_security import (
     hash_password,
@@ -232,10 +235,20 @@ class Attendance(db.Model):
     is_present = db.Column(db.Boolean, default=True)
 
     # SAS-93: New fields for enhanced attendance tracking
-    student_srn = db.Column(db.String(50), nullable=True)
-    course_id = db.Column(db.String(50), nullable=True)
-    status = db.Column(db.String(20), nullable=True)  # 'present' or 'absent'
-    marked_by = db.Column(db.String(100), nullable=True)
+    # Store encrypted ciphertext in the DB column names to remain backward compatible
+    # while exposing plaintext via Python properties. We also store deterministic
+    # hashes to allow filtering/searching without revealing plaintext (privacy-preserving).
+    _student_srn = db.Column('student_srn', db.String(500), nullable=True)
+    student_srn_hash = db.Column(db.String(64), nullable=True, index=True)
+
+    _course_id = db.Column('course_id', db.String(500), nullable=True)
+    course_id_hash = db.Column(db.String(64), nullable=True, index=True)
+
+    _status = db.Column('status', db.String(500), nullable=True)
+    status_hash = db.Column(db.String(64), nullable=True, index=True)
+
+    # marked_by is less sensitive but still encrypted at rest
+    _marked_by = db.Column('marked_by', db.String(500), nullable=True)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow,
                           onupdate=datetime.utcnow, nullable=False)
 
@@ -249,3 +262,106 @@ class Attendance(db.Model):
         """String representation of Attendance record."""
         return (f"<Attendance id={self.id} student_srn={self.student_srn} "
                 f"course={self.course_id} date={self.date} status={self.status}>")
+
+    # ---------------------------
+    # Transparent encryption helpers
+    # ---------------------------
+    # Hybrid-style properties expose plaintext to application code while
+    # storing ciphertext in the underlying DB columns. The comparator
+    # implementations below allow queries like
+    # Attendance.query.filter_by(student_srn="PES1UG23CS001") to work by
+    # comparing deterministic hashes in SQL instead of plaintext.
+    from sqlalchemy.ext.hybrid import hybrid_property
+    from sqlalchemy.ext.hybrid import Comparator
+
+    class _HashComparator(Comparator):
+        """Comparator that compares the stored hash column to the hash of rhs."""
+        def __init__(self, expr):
+            super().__init__(expr)
+
+        def __eq__(self, other):
+            # Compare hashed values in the DB for deterministic searching.
+            return self.__clause_element__() == hash_value(other)
+
+    @hybrid_property
+    def student_srn(self):
+        """Return decrypted student SRN."""
+        if self._student_srn:
+            try:
+                return decrypt_data(self._student_srn)
+            except Exception:
+                return None
+        return None
+
+    @student_srn.setter
+    def student_srn(self, value):
+        if value is None:
+            self._student_srn = None
+            self.student_srn_hash = None
+        else:
+            self._student_srn = encrypt_data(value)
+            self.student_srn_hash = hash_value(value)
+
+    @student_srn.comparator
+    def student_srn(cls):
+        return cls._HashComparator(cls.student_srn_hash)
+
+    @hybrid_property
+    def course_id(self):
+        if self._course_id:
+            try:
+                return decrypt_data(self._course_id)
+            except Exception:
+                return None
+        return None
+
+    @course_id.setter
+    def course_id(self, value):
+        if value is None:
+            self._course_id = None
+            self.course_id_hash = None
+        else:
+            self._course_id = encrypt_data(value)
+            self.course_id_hash = hash_value(value)
+
+    @course_id.comparator
+    def course_id(cls):
+        return cls._HashComparator(cls.course_id_hash)
+
+    @hybrid_property
+    def status(self):
+        if self._status:
+            try:
+                return decrypt_data(self._status)
+            except Exception:
+                return None
+        return None
+
+    @status.setter
+    def status(self, value):
+        if value is None:
+            self._status = None
+            self.status_hash = None
+        else:
+            self._status = encrypt_data(value)
+            self.status_hash = hash_value(value)
+
+    @status.comparator
+    def status(cls):
+        return cls._HashComparator(cls.status_hash)
+
+    @hybrid_property
+    def marked_by(self):
+        if self._marked_by:
+            try:
+                return decrypt_data(self._marked_by)
+            except Exception:
+                return None
+        return None
+
+    @marked_by.setter
+    def marked_by(self, value):
+        if value is None:
+            self._marked_by = None
+        else:
+            self._marked_by = encrypt_data(value)
