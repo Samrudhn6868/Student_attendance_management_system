@@ -9,3 +9,4 @@ bandit
 python-dotenv
 Werkzeug
 PyJWT
+bcrypt>=4.0.0
