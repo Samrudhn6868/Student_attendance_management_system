@@ -16,8 +16,8 @@ TEACHER_TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoyLCJ1c2Vybm
 ADMIN_TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjozLCJ1c2VybmFtZSI6IkFETUlOMDAxIiwicm9sZSI6ImFkbWluIiwibmFtZSI6IkFkbWluIFVzZXIiLCJpYXQiOjE3NjI1ODkyMTgsImV4cCI6MTc2MjY3NTYxOH0.g9Of8IzfkPEFZPeZiKKbg7cMj1i633vztwUhkMhoj-A"
 
 
-def test_endpoint(name, method, url, token, data=None):
-    """Test an endpoint with a given token."""
+def check_endpoint(name, method, url, token, data=None):
+    """Check an endpoint with a given token."""
     headers = {
         'Authorization': f'Bearer {token}',
         'Content-Type': 'application/json'
@@ -54,7 +54,7 @@ def main():
     print("="*70)
     
     # Test 1: Student accessing view endpoint (should succeed)
-    test_endpoint(
+    check_endpoint(
         "Test 1: Student viewing attendance (SHOULD SUCCEED)",
         "GET",
         f"{BASE_URL}/attendance/api/view",
@@ -62,7 +62,7 @@ def main():
     )
     
     # Test 2: Student accessing mark endpoint (should fail with 403)
-    test_endpoint(
+    check_endpoint(
         "Test 2: Student marking attendance (SHOULD FAIL - 403)",
         "POST",
         f"{BASE_URL}/attendance/api/mark",
@@ -76,7 +76,7 @@ def main():
     )
     
     # Test 3: Student accessing override endpoint (should fail with 403)
-    test_endpoint(
+    check_endpoint(
         "Test 3: Student overriding attendance (SHOULD FAIL - 403)",
         "PUT",
         f"{BASE_URL}/attendance/api/override",
@@ -89,7 +89,7 @@ def main():
     )
     
     # Test 4: Teacher accessing view endpoint (should succeed)
-    test_endpoint(
+    check_endpoint(
         "Test 4: Teacher viewing attendance (SHOULD SUCCEED)",
         "GET",
         f"{BASE_URL}/attendance/api/view",
@@ -97,7 +97,7 @@ def main():
     )
     
     # Test 5: Teacher accessing mark endpoint (should succeed)
-    test_endpoint(
+    check_endpoint(
         "Test 5: Teacher marking attendance (SHOULD SUCCEED)",
         "POST",
         f"{BASE_URL}/attendance/api/mark",
@@ -111,7 +111,7 @@ def main():
     )
     
     # Test 6: Teacher accessing override endpoint (should fail with 403)
-    test_endpoint(
+    check_endpoint(
         "Test 6: Teacher overriding attendance (SHOULD FAIL - 403)",
         "PUT",
         f"{BASE_URL}/attendance/api/override",
@@ -124,7 +124,7 @@ def main():
     )
     
     # Test 7: Admin accessing view endpoint (should succeed)
-    test_endpoint(
+    check_endpoint(
         "Test 7: Admin viewing attendance (SHOULD SUCCEED)",
         "GET",
         f"{BASE_URL}/attendance/api/view",
@@ -132,7 +132,7 @@ def main():
     )
     
     # Test 8: Admin accessing mark endpoint (should succeed)
-    test_endpoint(
+    check_endpoint(
         "Test 8: Admin marking attendance (SHOULD SUCCEED)",
         "POST",
         f"{BASE_URL}/attendance/api/mark",
@@ -146,7 +146,7 @@ def main():
     )
     
     # Test 9: Admin accessing override endpoint (should succeed)
-    test_endpoint(
+    check_endpoint(
         "Test 9: Admin overriding attendance (SHOULD SUCCEED)",
         "PUT",
         f"{BASE_URL}/attendance/api/override",

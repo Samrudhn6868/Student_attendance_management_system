@@ -43,7 +43,7 @@ def test_app():
     
     @login_manager.user_loader
     def load_user(user_id):
-        return User.query.get(int(user_id))
+        return db.session.get(User, int(user_id))
     
     # Create tables
     with app.app_context():
@@ -347,7 +347,7 @@ class TestDatabasePersistence:
         db.session.expunge_all()
         
         # Retrieve user again
-        retrieved_user = User.query.get(user_id)
+        retrieved_user = db.session.get(User, user_id)
         
         # Lock state should persist
         assert retrieved_user.account_locked is True
@@ -381,7 +381,7 @@ class TestDatabasePersistence:
         db.session.expunge_all()
         
         # Retrieve user
-        retrieved_user = User.query.get(user_id)
+        retrieved_user = db.session.get(User, user_id)
         
         # Counter should persist
         assert retrieved_user.failed_login_attempts == 2

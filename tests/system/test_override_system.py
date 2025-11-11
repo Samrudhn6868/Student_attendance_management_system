@@ -13,10 +13,14 @@ from flask import Flask
 from flask_login import LoginManager
 
 # Add parent directory to path to import src modules
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
+_HERE = os.path.dirname(__file__)
+_REPO_ROOT = os.path.abspath(os.path.join(_HERE, '..', '..'))
+_SRC_DIR = os.path.join(_REPO_ROOT, 'src')
+if _SRC_DIR not in sys.path:
+    sys.path.insert(0, _SRC_DIR)
 
-from src.attendance_routes import attendance_bp
-from src.models import Attendance, User, db
+from attendance_routes import attendance_bp
+from models import Attendance, User, db
 
 
 @pytest.fixture
@@ -38,7 +42,7 @@ def test_app():
     
     @login_manager.user_loader
     def load_user(user_id):
-        return User.query.get(int(user_id))
+        return db.session.get(User, int(user_id))
     
     app.register_blueprint(attendance_bp)
     
@@ -60,31 +64,51 @@ def system_users(test_app):
     """Create a complete set of users for system testing."""
     with test_app.app_context():
         # Admin user
-        admin = User(user_id=1, name='System Admin', is_faculty=True)
+        admin = User(user_id=1, name='System Admin', is_faculty=True, username='admin1')
         admin.role = 'admin'
         
         # Teacher users
-        teacher1 = User(user_id=2, name='Teacher One', is_faculty=True)
+        teacher1 = User(user_id=2, name='Teacher One', is_faculty=True, username='teacher1')
         teacher1.role = 'teacher'
         
-        teacher2 = User(user_id=3, name='Teacher Two', is_faculty=True)
+        teacher2 = User(user_id=3, name='Teacher Two', is_faculty=True, username='teacher2')
         teacher2.role = 'teacher'
         
         # Student users
         students = []
         for i in range(4, 14):  # 10 students
-            student = User(user_id=i, name=f'Student {i-3}', is_faculty=False)
+            student = User(user_id=i, name=f'Student {i-3}', is_faculty=False, username=f'student{i-3}')
             student.role = 'student'
             students.append(student)
         
         db.session.add_all([admin, teacher1, teacher2] + students)
         db.session.commit()
         
-        return {
-            'admin': admin,
-            'teachers': [teacher1, teacher2],
-            'students': students
-        }
+        admin_id = admin.id
+        teacher_ids = [teacher1.id, teacher2.id]
+        student_ids = [s.id for s in students]
+    
+    # Return dictionary with User objects that will be fetched fresh in each test
+    # This avoids detached instance errors
+    class UserAccessor:
+        def __init__(self, app, admin_id, teacher_ids, student_ids):
+            self.app = app
+            self.admin_id = admin_id
+            self.teacher_ids = teacher_ids
+            self.student_ids = student_ids
+        
+        def __getitem__(self, key):
+            with self.app.app_context():
+                if key == 'admin':
+                    return db.session.get(User, self.admin_id)
+                elif key == 'teachers':
+                    return [db.session.get(User, tid) for tid in self.teacher_ids]
+                elif key == 'students':
+                    return [db.session.get(User, sid) for sid in self.student_ids]
+                else:
+                    raise KeyError(key)
+    
+    return UserAccessor(test_app, admin_id, teacher_ids, student_ids)
 
 
 class TestSystemScenarios:
@@ -124,7 +148,7 @@ class TestSystemScenarios:
             db.session.commit()
             
             # Step 4: Verify complete audit trail
-            final_record = Attendance.query.get(attendance.id)
+            final_record = db.session.get(Attendance, attendance.id)
             
             assert final_record.is_present is True
             assert final_record.is_overridden is True
@@ -318,8 +342,8 @@ class TestSystemScenarios:
             # Step 4: Generate compliance report data
             report_data = []
             for record in overridden_records:
-                student = User.query.get(record.student_id)
-                admin_user = User.query.get(record.overridden_by)
+                student = db.session.get(User, record.student_id)
+                admin_user = db.session.get(User, record.overridden_by)
                 
                 report_entry = {
                     'student_name': student.name if student else 'Unknown',

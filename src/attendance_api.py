@@ -265,7 +265,7 @@ def update_attendance():
             }), 401
 
         # Find attendance record
-        attendance = Attendance.query.get(data['attendance_id'])
+        attendance = db.session.get(Attendance, data['attendance_id'])
         if not attendance:
             return jsonify({
                 'success': False,
@@ -583,7 +583,7 @@ def jwt_update_attendance():
         jwt_user = request.jwt_user
 
         # Find attendance record
-        attendance = Attendance.query.get(data['attendance_id'])
+        attendance = db.session.get(Attendance, data['attendance_id'])
         if not attendance:
             return jsonify({
                 'success': False,

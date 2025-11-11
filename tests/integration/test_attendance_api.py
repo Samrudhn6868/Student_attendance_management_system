@@ -48,7 +48,7 @@ def test_app():
     
     @login_manager.user_loader
     def load_user(user_id):
-        return MainUser.query.get(int(user_id))
+        return db.session.get(MainUser, int(user_id))
     
     # Register blueprint
     app.register_blueprint(attendance_api_bp)
@@ -259,7 +259,7 @@ def test_update_attendance_as_teacher_session(client, test_app, test_users):
             
             # Verify in database
             with test_app.app_context():
-                updated = Attendance.query.get(attendance_id)
+                updated = db.session.get(Attendance, attendance_id)
                 assert updated.status == 'present'
 
 
@@ -698,7 +698,7 @@ def test_updated_at_changes_on_update(client, test_app, auth_headers):
     
     # Check that updated_at changed
     with test_app.app_context():
-        updated = Attendance.query.get(attendance_id)
+        updated = db.session.get(Attendance, attendance_id)
         assert updated.updated_at > original_updated_at
 
 
