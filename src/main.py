@@ -26,7 +26,9 @@ from flask_login import (
     logout_user,
     current_user,
 )
-from werkzeug.security import generate_password_hash, check_password_hash
+
+# SAS-86: Import password security module for bcrypt support
+from password_security import hash_password, verify_password
 
 # SAS-88: Import RBAC components
 from attendance_routes import attendance_bp
@@ -79,12 +81,14 @@ class User(UserMixin, db.Model):
     role = db.Column(db.String(20), default='student')  # SAS-88: Added role column
 
     def set_password(self, password):
-        """Hash and set the user's password."""
-        self.password_hash = generate_password_hash(password)
+        """Hash and set the user's password using bcrypt (SAS-86)."""
+        self.password_hash = hash_password(password)
 
     def check_password(self, password):
-        """Return True if the given plaintext password matches the stored hash."""
-        return check_password_hash(self.password_hash, password)
+        """Return True if the given plaintext password matches the stored hash (SAS-86)."""
+        if password is None:
+            return False
+        return verify_password(password, self.password_hash)
 
     def is_locked(self):
         """Check if account is locked.

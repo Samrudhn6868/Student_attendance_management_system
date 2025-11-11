@@ -7,6 +7,9 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_login import UserMixin
 from werkzeug.security import generate_password_hash, check_password_hash
 
+# SAS-86: Import password security functions
+from password_security import hash_password, verify_password
+
 db = SQLAlchemy()
 
 class User(UserMixin, db.Model):
@@ -97,6 +100,27 @@ class User(UserMixin, db.Model):
     def get_id(self):
         """Override UserMixin get_id to use id."""
         return str(self.id)
+    
+    def set_password(self, password):
+        """Hash and set the user's password using bcrypt (SAS-86).
+        
+        Args:
+            password (str): Plaintext password to hash
+        """
+        self.password_hash = hash_password(password)
+    
+    def check_password(self, password):
+        """Verify if the given plaintext password matches the stored hash (SAS-86).
+        
+        Args:
+            password (str): Plaintext password to verify
+            
+        Returns:
+            bool: True if password matches, False otherwise
+        """
+        if password is None:
+            return False
+        return verify_password(password, self.password_hash)
 
     def set_password(self, password):
         """Hash and set the user's password."""
