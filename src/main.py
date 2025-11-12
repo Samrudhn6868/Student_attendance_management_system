@@ -48,7 +48,6 @@ from audit_api import audit_api
 
 # Load environment variables
 load_dotenv()
-
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'your-secret-key-here')
 app.config['SITE_NAME'] = os.getenv('SITE_NAME', 'PESU Attendance')
