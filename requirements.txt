@@ -11,3 +11,4 @@ Werkzeug
 PyJWT
 cryptography
 bcrypt>=5.0.0
+requests
