@@ -1,15 +1,39 @@
-"""SAS-96: Bunk Allowance API.
+"""SAS-96: Bunk Allowance REST API.
 
 This module provides REST API endpoints for viewing bunk allowances
-and remaining classes for students.
+and remaining classes for students. All endpoints support both session-based
+(Flask-Login) and token-based (JWT) authentication.
 
-Endpoints:
-- GET /api/bunk-allowance/student/<srn> - Get bunk allowance for specific student
-- GET /api/bunk-allowance/student/<srn>/course/<course_id> - Get for specific course
-- GET /api/bunk-allowance/course/<course_id>/students - Get all students in a course
-- GET /api/bunk-allowance/critical - Get students with critical attendance
-- POST /api/bunk-allowance/course - Create/update course configuration
-- GET /api/bunk-allowance/breakdown/<srn>/<course_id> - Get detailed breakdown
+API Endpoints:
+    Student Endpoints:
+        - GET /api/bunk-allowance/student/<srn> 
+          Get bunk allowance for all courses of a student
+        - GET /api/bunk-allowance/student/<srn>/course/<course_id>
+          Get bunk allowance for specific course
+        - GET /api/bunk-allowance/breakdown/<srn>/<course_id>
+          Get detailed breakdown with projections
+    
+    Faculty/Admin Endpoints:
+        - GET /api/bunk-allowance/course/<course_id>/students
+          Get all students' bunk status in a course
+        - GET /api/bunk-allowance/critical
+          Get students with critical attendance (below threshold)
+        - POST /api/bunk-allowance/course/config
+          Create or update course configuration
+        - GET /api/bunk-allowance/course/<course_id>/config
+          Get course configuration
+        - PUT /api/bunk-allowance/course/<course_id>/refresh
+          Refresh bunk calculations for all students in course
+
+Authorization:
+    - Students: Can only view their own data
+    - Faculty: Can view all students in their courses
+    - Admin: Full access to all endpoints
+
+Authentication:
+    Supports dual authentication:
+    - Session-based: Flask-Login (cookie-based)
+    - Token-based: JWT (Authorization: Bearer <token>)
 """
 
 from flask import Blueprint, jsonify, request

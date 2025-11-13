@@ -3,6 +3,19 @@
 This module provides business logic for calculating and managing student
 bunk allowances and remaining classes. It integrates with the existing
 attendance system.
+
+Classes:
+    BunkAllowanceService: Core service class with static methods for bunk calculations
+
+Methods:
+    - get_or_create_course_config: Course configuration management
+    - calculate_student_attendance_stats: Real-time attendance calculation
+    - update_student_bunk_allowance: Update student's bunk tracking
+    - get_student_bunk_allowance: Retrieve bunk allowance data
+    - get_remaining_classes_breakdown: Detailed class projections
+    - get_all_students_bunk_status: Bulk student status retrieval
+    - get_critical_students: Identify at-risk students
+    - bulk_update_course_allowances: Course-wide updates
 """
 
 from datetime import datetime

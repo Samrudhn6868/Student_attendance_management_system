@@ -2,6 +2,23 @@
 
 This module defines the database models for tracking student bunk allowances
 and remaining classes. It integrates with the existing Attendance system.
+
+Models:
+    CourseConfig:
+        Configuration for course-level bunk allowance policies.
+        Stores total classes, bunk percentage, and minimum attendance requirements.
+    
+    StudentBunkAllowance:
+        Per-student, per-course tracking of bunk allowance and attendance.
+        Automatically calculates remaining bunks and critical status.
+
+Database Schema:
+    - course_config: Course-level configuration (indexed on course_id)
+    - student_bunk_allowance: Student attendance tracking (composite key: student_srn + course_id)
+
+Relationships:
+    - Integrates with existing Attendance model for real-time calculations
+    - Links to User model via student_srn field
 """
 
 from datetime import datetime
