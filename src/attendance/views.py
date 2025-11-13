@@ -10,7 +10,9 @@ attendance_bp = Blueprint('attendance', __name__)
 @login_required
 @require_role('teacher', 'admin')
 def mark_attendance():
-    students = User.query.filter_by(is_faculty=False).all()
+    students = db.session.execute(
+        db.select(User).filter_by(is_faculty=False)
+    ).scalars().all()
     today = date.today()
 
     if request.method == 'POST':
