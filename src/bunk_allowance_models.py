@@ -40,6 +40,7 @@ class CourseConfig(db.Model):
         updated_at (datetime): Timestamp when course was last updated
     """
     __tablename__ = 'course_config'
+    __table_args__ = {'extend_existing': True}
 
     id = db.Column(db.Integer, primary_key=True)
     course_id = db.Column(db.String(50), unique=True, nullable=False, index=True)
@@ -110,6 +111,7 @@ class StudentBunkAllowance(db.Model):
         last_updated (datetime): Last time this record was updated
     """
     __tablename__ = 'student_bunk_allowance'
+    __table_args__ = {'extend_existing': True}
 
     id = db.Column(db.Integer, primary_key=True)
     student_srn = db.Column(db.String(100), nullable=False, index=True)
