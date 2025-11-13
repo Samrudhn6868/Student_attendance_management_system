@@ -1,16 +1,24 @@
 """SAS-96: Integration script to register bunk allowance blueprint.
 
 This script should be imported in main.py to register the bunk allowance API.
+
+Functions:
+    register_bunk_allowance_blueprint: Register API blueprint with Flask app
+    init_bunk_allowance_tables: Initialize database tables
 """
 
+from typing import Any
 from flask import Flask
 
 
-def register_bunk_allowance_blueprint(app: Flask):
+def register_bunk_allowance_blueprint(app: Flask) -> None:
     """Register the bunk allowance blueprint with the Flask app.
-    
+
     Args:
         app: Flask application instance
+
+    Returns:
+        None
     """
     try:
         from bunk_allowance_api import bunk_allowance_bp
@@ -22,11 +30,14 @@ def register_bunk_allowance_blueprint(app: Flask):
         print(f"Error registering bunk allowance blueprint: {e}")
 
 
-def init_bunk_allowance_tables(db):
+def init_bunk_allowance_tables(db: Any) -> None:
     """Initialize bunk allowance database tables.
-    
+
     Args:
         db: SQLAlchemy database instance
+
+    Returns:
+        None
     """
     try:
         from bunk_allowance_models import CourseConfig, StudentBunkAllowance
