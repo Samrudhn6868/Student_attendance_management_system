@@ -198,7 +198,9 @@ def login():
         username = request.form.get('username')  # SRN or Faculty ID
         password = request.form.get('password')
 
-        user = User.query.filter_by(username=username).first()
+        user = db.session.execute(
+            db.select(User).filter_by(username=username)
+        ).scalar_one_or_none()
 
         if user:
             # Check if account is locked
@@ -493,7 +495,9 @@ def api_login():
             'message': 'Both username and password are required'
         }), 400
 
-    user = User.query.filter_by(username=username).first()
+    user = db.session.execute(
+        db.select(User).filter_by(username=username)
+    ).scalar_one_or_none()
 
     if user and user.check_password(password):
         return jsonify(create_token_response(user)), 200
@@ -530,7 +534,9 @@ with app.app_context():
                 reset_pw = bool(os.getenv('RESET_DEMO_PASSWORDS'))
 
                 def ensure_user(username, name, is_faculty, role, password):
-                    user = User.query.filter_by(username=username).first()
+                    user = db.session.execute(
+                        db.select(User).filter_by(username=username)
+                    ).scalar_one_or_none()
                     if not user:
                         user = User(
                             username=username,
@@ -560,6 +566,15 @@ with app.app_context():
         # Non-fatal in dev; avoid breaking app start due to seeding issues.
         # You can disable this block by setting DISABLE_DEMO_SEED=1 in the environment.
         print(f"[seed] Skipped demo user seeding due to: {seed_err}")
+
+# SAS-96: Register Bunk Allowance Feature
+try:
+    from bunk_allowance_quick_setup import setup_bunk_allowance
+    setup_bunk_allowance(app, db)
+except ImportError as e:
+    print(f"[bunk_allowance] Feature not available: {e}")
+except Exception as e:
+    print(f"[bunk_allowance] Setup warning: {e}")
 
 if __name__ == '__main__':
     app.run(debug=True)

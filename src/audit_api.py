@@ -114,7 +114,7 @@ def get_log_detail(log_id):
         JSON response with audit log details
     """
     try:
-        log = AuditLog.query.get(log_id)
+        log = db.session.get(AuditLog, log_id)
         
         if not log:
             return jsonify({'error': 'Audit log entry not found'}), 404

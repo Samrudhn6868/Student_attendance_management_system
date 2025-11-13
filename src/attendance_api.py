@@ -204,11 +204,13 @@ def submit_attendance():
             }), 401
 
         # Check if attendance already exists for this student/course/date
-        existing = Attendance.query.filter_by(
-            student_srn=data['student_srn'],
-            course_id=data['course_id'],
-            date=datetime.strptime(data['date'], '%Y-%m-%d').date()
-        ).first()
+        existing = db.session.execute(
+            db.select(Attendance).filter_by(
+                student_srn=data['student_srn'],
+                course_id=data['course_id'],
+                date=datetime.strptime(data['date'], '%Y-%m-%d').date()
+            )
+        ).scalar_one_or_none()
 
         if existing:
             return jsonify({
@@ -413,7 +415,9 @@ def view_attendance():
         # Students can only see their own records
         if user_info['role'] == 'student':
             # Get student's SRN from username or User table
-            user = User.query.filter_by(user_id=user_info['user_id']).first()
+            user = db.session.execute(
+                db.select(User).filter_by(user_id=user_info['user_id'])
+            ).scalar_one_or_none()
             if user:
                 # Assuming username is the SRN for students
                 student_srn = getattr(current_user, 'username', None)
@@ -520,11 +524,13 @@ def jwt_submit_attendance():
         jwt_user = request.jwt_user
 
         # Check for duplicate
-        existing = Attendance.query.filter_by(
-            student_srn=data['student_srn'],
-            course_id=data['course_id'],
-            date=datetime.strptime(data['date'], '%Y-%m-%d').date()
-        ).first()
+        existing = db.session.execute(
+            db.select(Attendance).filter_by(
+                student_srn=data['student_srn'],
+                course_id=data['course_id'],
+                date=datetime.strptime(data['date'], '%Y-%m-%d').date()
+            )
+        ).scalar_one_or_none()
 
         if existing:
             return jsonify({
