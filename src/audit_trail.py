@@ -1,13 +1,21 @@
-"""Audit Trail System for SAS-94.
+"""Audit Trail System with Encrypted Sensitive Data (SAS-94 + Encryption).
 
 Provides comprehensive audit logging for all attendance-related changes
-to ensure compliance and traceability.
+with encryption for sensitive fields to ensure compliance and privacy.
 
 Features:
 - Automatic logging of all attendance modifications
+- Encryption of sensitive fields (IP addresses, changes, reasons)
 - Read-only audit entries accessible only to admins
 - Audit report generation by date range or user
 - Tracks create, update, and delete operations
+- Log sanitization for sensitive data
+
+Security:
+- IP addresses encrypted at rest
+- Changes and values encrypted at rest
+- User agents sanitized before storage
+- Personal identifiers protected
 """
 
 from datetime import datetime
@@ -17,9 +25,19 @@ from flask_login import current_user
 from models import db
 import json
 
+# Import encryption utilities for sensitive data
+from encryption_utils import (
+    encrypt_data,
+    decrypt_data,
+    encrypt_json,
+    decrypt_json,
+    sanitize_log_message,
+    sanitize_dict
+)
+
 
 class AuditLog(db.Model):
-    """Audit log model for tracking attendance modifications.
+    """Audit log model with encrypted sensitive fields.
     
     Attributes:
         id (int): Primary key
@@ -30,45 +48,146 @@ class AuditLog(db.Model):
         record_type (str): Type of record affected (attendance)
         record_id (int): ID of the affected attendance record
         timestamp (datetime): When the action occurred
-        ip_address (str): IP address of the user
-        changes (str): JSON string of changes made
-        old_values (str): JSON string of old values (for UPDATE/DELETE)
-        new_values (str): JSON string of new values (for CREATE/UPDATE)
+        _ip_address (str): ENCRYPTED IP address of the user
+        _changes (str): ENCRYPTED JSON string of changes made
+        _old_values (str): ENCRYPTED JSON string of old values (for UPDATE/DELETE)
+        _new_values (str): ENCRYPTED JSON string of new values (for CREATE/UPDATE)
         student_srn (str): SRN of student whose attendance was modified
         course_id (str): Course ID for the attendance record
         attendance_date (str): Date of the attendance record
-        reason (str): Optional reason for the change
+        _reason (str): ENCRYPTED optional reason for the change
+    
+    Note: Fields prefixed with _ are encrypted at rest. Use properties to access.
     """
     __tablename__ = 'audit_log'
     
     id = db.Column(db.Integer, primary_key=True)
     
-    # User information
-    user_id = db.Column(db.Integer, nullable=True, index=True)  # Can be null for system actions
+    # User information (not encrypted - needed for queries)
+    user_id = db.Column(db.Integer, nullable=True, index=True)
     username = db.Column(db.String(80), nullable=True)
     user_role = db.Column(db.String(20), nullable=True)
     
     # Action details
-    action_type = db.Column(db.String(20), nullable=False, index=True)  # CREATE/UPDATE/DELETE
+    action_type = db.Column(db.String(20), nullable=False, index=True)
     record_type = db.Column(db.String(50), nullable=False, default='attendance')
     record_id = db.Column(db.Integer, nullable=True, index=True)
     
     # Timestamp and tracking
     timestamp = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, index=True)
-    ip_address = db.Column(db.String(45), nullable=True)  # IPv6 max length
     
-    # Change tracking (stored as JSON)
-    changes = db.Column(db.Text, nullable=True)
-    old_values = db.Column(db.Text, nullable=True)
-    new_values = db.Column(db.Text, nullable=True)
+    # ENCRYPTED FIELDS (sensitive data at rest)
+    _ip_address = db.Column('ip_address', db.String(500), nullable=True)  # Encrypted
+    _changes = db.Column('changes', db.Text, nullable=True)  # Encrypted JSON
+    _old_values = db.Column('old_values', db.Text, nullable=True)  # Encrypted JSON
+    _new_values = db.Column('new_values', db.Text, nullable=True)  # Encrypted JSON
+    _reason = db.Column('reason', db.String(1000), nullable=True)  # Encrypted
     
-    # Attendance-specific fields for quick filtering
+    # Attendance-specific fields for quick filtering (not encrypted)
     student_srn = db.Column(db.String(50), nullable=True, index=True)
     course_id = db.Column(db.String(50), nullable=True, index=True)
     attendance_date = db.Column(db.String(20), nullable=True, index=True)
     
-    # Optional reason for the change
-    reason = db.Column(db.String(500), nullable=True)
+    # Properties for transparent encryption/decryption
+    @property
+    def ip_address(self):
+        """Decrypt IP address."""
+        if self._ip_address:
+            try:
+                return decrypt_data(self._ip_address)
+            except Exception:
+                return '[DECRYPTION_ERROR]'
+        return None
+    
+    @ip_address.setter
+    def ip_address(self, value):
+        """Encrypt IP address."""
+        if value:
+            self._ip_address = encrypt_data(value)
+        else:
+            self._ip_address = None
+    
+    @property
+    def changes(self):
+        """Decrypt changes."""
+        if self._changes:
+            try:
+                decrypted = decrypt_data(self._changes)
+                return decrypted if decrypted else None
+            except Exception:
+                return None
+        return None
+    
+    @changes.setter
+    def changes(self, value):
+        """Encrypt changes (JSON string)."""
+        if value:
+            # Sanitize before encryption
+            if isinstance(value, str):
+                value = sanitize_log_message(value)
+            self._changes = encrypt_data(value)
+        else:
+            self._changes = None
+    
+    @property
+    def old_values(self):
+        """Decrypt old values."""
+        if self._old_values:
+            try:
+                return decrypt_data(self._old_values)
+            except Exception:
+                return None
+        return None
+    
+    @old_values.setter
+    def old_values(self, value):
+        """Encrypt old values (JSON string)."""
+        if value:
+            if isinstance(value, str):
+                value = sanitize_log_message(value)
+            self._old_values = encrypt_data(value)
+        else:
+            self._old_values = None
+    
+    @property
+    def new_values(self):
+        """Decrypt new values."""
+        if self._new_values:
+            try:
+                return decrypt_data(self._new_values)
+            except Exception:
+                return None
+        return None
+    
+    @new_values.setter
+    def new_values(self, value):
+        """Encrypt new values (JSON string)."""
+        if value:
+            if isinstance(value, str):
+                value = sanitize_log_message(value)
+            self._new_values = encrypt_data(value)
+        else:
+            self._new_values = None
+    
+    @property
+    def reason(self):
+        """Decrypt reason."""
+        if self._reason:
+            try:
+                return decrypt_data(self._reason)
+            except Exception:
+                return '[DECRYPTION_ERROR]'
+        return None
+    
+    @reason.setter
+    def reason(self, value):
+        """Encrypt reason."""
+        if value:
+            # Sanitize before encryption
+            value = sanitize_log_message(str(value))
+            self._reason = encrypt_data(value)
+        else:
+            self._reason = None
     
     def __repr__(self):
         return (f"<AuditLog {self.id}: {self.action_type} by {self.username} "
