@@ -6,6 +6,7 @@ students. Designed for local development and testing.
 
 import os
 import sys
+import re
 from datetime import datetime, timedelta
 
 from dotenv import load_dotenv
@@ -267,6 +268,113 @@ def dashboard():
         return render_template('faculty_dashboard.html')
 
     return render_template('student_dashboard.html')
+
+
+# SAS-85: Password Change Endpoint with Strong Password Policy
+@app.route('/change-password', methods=['GET', 'POST'])
+@login_required
+def change_password():
+    """Allow users to change their password with strong password validation."""
+    from password_security import validate_password_strength, PasswordStrengthError
+    
+    if request.method == 'POST':
+        current_password = request.form.get('current_password')
+        new_password = request.form.get('new_password')
+        confirm_password = request.form.get('confirm_password')
+
+        # Validation
+        if not current_password or not new_password or not confirm_password:
+            flash('All fields are required.', 'error')
+            return render_template('change_password.html')
+
+        # Verify current password
+        if not current_user.check_password(current_password):
+            flash('Current password is incorrect.', 'error')
+            return render_template('change_password.html')
+
+        # Check if new password matches confirmation
+        if new_password != confirm_password:
+            flash('New passwords do not match.', 'error')
+            return render_template('change_password.html')
+
+        # Check if new password is different from current
+        if current_password == new_password:
+            flash('New password must be different from current password.', 'error')
+            return render_template('change_password.html')
+
+        # Validate password strength (SAS-85)
+        is_valid, error_msg = validate_password_strength(new_password)
+        if not is_valid:
+            flash(f'Password does not meet requirements: {error_msg}', 'error')
+            return render_template('change_password.html')
+
+        # Update password
+        try:
+            current_user.set_password(new_password)
+            db.session.commit()
+            flash('Password changed successfully!', 'success')
+            return redirect(url_for('dashboard'))
+        except PasswordStrengthError as e:
+            flash(f'Password change failed: {str(e)}', 'error')
+        except Exception as e:
+            db.session.rollback()
+            flash('An error occurred while changing password.', 'error')
+
+    return render_template('change_password.html')
+
+
+# SAS-85: API Endpoint for Password Strength Validation
+@app.route('/api/validate-password', methods=['POST'])
+def validate_password_api():
+    """API endpoint to validate password strength in real-time.
+    
+    Returns JSON with validation result and detailed requirements.
+    """
+    from password_security import validate_password_strength
+    
+    data = request.get_json()
+    password = data.get('password', '')
+
+    if not password:
+        return jsonify({
+            'valid': False,
+            'message': 'Password cannot be empty'
+        }), 400
+
+    is_valid, error_msg = validate_password_strength(password)
+    
+    # Calculate password strength score
+    strength_score = 0
+    checks = {
+        'length': len(password) >= 8,
+        'uppercase': bool(re.search(r'[A-Z]', password)),
+        'lowercase': bool(re.search(r'[a-z]', password)),
+        'digit': bool(re.search(r'[0-9]', password)),
+        'special': bool(re.search(r'[!@#$%^&*(),.?":{}|<>_\-+=\[\]\\\/;~`]', password))
+    }
+    
+    strength_score = sum(checks.values())
+    strength_level = 'weak'
+    if strength_score == 5:
+        strength_level = 'strong'
+    elif strength_score >= 3:
+        strength_level = 'medium'
+
+    return jsonify({
+        'valid': is_valid,
+        'message': error_msg if not is_valid else 'Password meets all requirements',
+        'strength': strength_level,
+        'score': strength_score,
+        'checks': checks,
+        'requirements': {
+            'min_length': 8,
+            'max_length': 128,
+            'requires_uppercase': True,
+            'requires_lowercase': True,
+            'requires_digit': True,
+            'requires_special': True
+        }
+    }), 200 if is_valid else 400
 
 
 @app.route('/leave/request', methods=['GET', 'POST'])
