@@ -135,14 +135,13 @@ def test_db_stores_encrypted_and_decrypts(client, test_app, test_users):
             att_id = data['attendance']['id']
 
             # Inspect DB stored ciphertext
-            with test_app.app_context():
-                rec = Attendance.query.get(att_id)
-                assert rec is not None
-                # Underlying DB column stores ciphertext (private attrs begin with _)
-                assert getattr(rec, '_student_srn') is not None
-                assert payload['student_srn'] not in getattr(rec, '_student_srn')
-                # Decryption via helper should return original
-                assert decrypt_data(getattr(rec, '_student_srn')) == payload['student_srn']
+            rec = Attendance.query.filter_by(id=att_id).first()
+            assert rec is not None
+            # Underlying DB column stores ciphertext (private attrs begin with _)
+            assert getattr(rec, '_student_srn') is not None
+            assert payload['student_srn'] not in getattr(rec, '_student_srn')
+            # Decryption via helper should return original
+            assert decrypt_data(getattr(rec, '_student_srn')) == payload['student_srn']
 
 
 def test_api_returns_decrypted_values_for_teacher_and_jwt(client, test_app, auth_headers):
