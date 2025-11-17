@@ -40,12 +40,22 @@ from password_security import hash_password, verify_password
 # SAS-88: Import RBAC components
 from attendance_routes import attendance_bp
 from auth_middleware import create_token_response
+from rbac import require_role
 
 # SAS-93: Import attendance API
 from attendance_api import attendance_api_bp
 
 # SAS-94: Import audit trail API
 from audit_api import audit_api
+
+# Import correction request API
+from correction_request_api import correction_bp
+
+# Import admin override API
+from admin_override_api import admin_override_bp
+
+# Import models for database operations
+from models import db, User
 
 # Load environment variables
 load_dotenv()
@@ -62,8 +72,8 @@ app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv(
 )
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
-# Initialize extensions
-db = SQLAlchemy(app)
+# Initialize extensions with the app
+db.init_app(app)
 login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
@@ -72,88 +82,6 @@ login_manager.login_view = 'login'
 def inject_site_name():
     """Expose site_name into all templates for consistent branding and titles."""
     return {"site_name": app.config.get('SITE_NAME', 'PESU Attendance')}
-
-# User Model
-class User(UserMixin, db.Model):
-    """A user of the attendance system.
-
-    Attributes:
-        id: primary key
-        username: SRN for students or faculty ID
-        password_hash: hashed password
-        is_faculty: whether the user is a faculty member
-        name: full name for display
-        failed_login_attempts: count of consecutive failed login attempts
-        account_locked: whether the account is currently locked
-        locked_at: timestamp when account was locked
-    """
-
-    id = db.Column(db.Integer, primary_key=True)
-    username = db.Column(db.String(80), unique=True, nullable=False)  # SRN or Faculty ID
-    password_hash = db.Column(db.String(120), nullable=False)
-    is_faculty = db.Column(db.Boolean, default=False)
-    name = db.Column(db.String(100), nullable=False)
-
-    # Account locking fields
-    failed_login_attempts = db.Column(db.Integer, default=0)
-    account_locked = db.Column(db.Boolean, default=False)
-    locked_at = db.Column(db.DateTime, nullable=True)
-
-    # Role (RBAC) - keep for compatibility with RBAC feature
-    role = db.Column(db.String(20), default='student')  # SAS-88: Added role column
-
-    def set_password(self, password):
-        """Hash and set the user's password using bcrypt (SAS-86)."""
-        self.password_hash = hash_password(password)
-
-    def check_password(self, password):
-        """Return True if the given plaintext password matches the stored hash (SAS-86)."""
-        if password is None:
-            return False
-        return verify_password(password, self.password_hash)
-
-    def is_locked(self):
-        """Check if account is locked.
-        
-        Automatically unlocks if locked for more than 30 minutes.
-        """
-        if not self.account_locked:
-            return False
-        
-        # Auto-unlock after 30 minutes
-        if self.locked_at:
-            unlock_time = self.locked_at + timedelta(minutes=30)
-            if datetime.utcnow() >= unlock_time:
-                self.unlock_account()
-                return False
-        
-        return True
-
-    def lock_account(self):
-        """Lock the account after too many failed attempts."""
-        self.account_locked = True
-        self.locked_at = datetime.utcnow()
-        db.session.commit()
-
-    def unlock_account(self):
-        """Unlock the account and reset failed attempts."""
-        self.account_locked = False
-        self.locked_at = None
-        self.failed_login_attempts = 0
-        db.session.commit()
-
-    def record_failed_login(self):
-        """Increment failed login attempts and lock if threshold reached."""
-        self.failed_login_attempts += 1
-        if self.failed_login_attempts >= 3:
-            self.lock_account()
-        else:
-            db.session.commit()
-
-    def reset_failed_attempts(self):
-        """Reset failed login attempts counter on successful login."""
-        self.failed_login_attempts = 0
-        db.session.commit()
 
 
 class LeaveRequest(db.Model):
@@ -263,11 +191,98 @@ def logout():
 @app.route('/dashboard')
 @login_required
 def dashboard():
-    """Show faculty or student dashboard depending on role."""
-    if current_user.is_faculty:
-        return render_template('faculty_dashboard.html')
-
-    return render_template('student_dashboard.html')
+    """Show faculty or student dashboard depending on role with real database data."""
+    from models import Attendance
+    
+    try:
+        if current_user.is_faculty:
+            # Faculty/Admin dashboard with real stats
+            total_students = User.query.filter_by(role='student').count()
+            total_attendance_records = Attendance.query.count()
+            
+            # Calculate average attendance percentage
+            all_students = User.query.filter_by(role='student').all()
+            attendance_percentages = []
+            for student in all_students:
+                records = Attendance.query.filter_by(student_id=student.id).all()
+                if records:
+                    present = sum(1 for r in records if r.is_present)
+                    percentage = (present / len(records) * 100) if records else 0
+                    attendance_percentages.append(percentage)
+            
+            avg_attendance = sum(attendance_percentages) / len(attendance_percentages) if attendance_percentages else 0
+            
+            return render_template('faculty_dashboard.html', 
+                                 total_students=total_students,
+                                 avg_attendance=round(avg_attendance, 2),
+                                 total_records=total_attendance_records)
+        
+        # Student dashboard with real stats
+        records = Attendance.query.filter_by(student_id=current_user.id).all()
+        
+        total_classes = len(records)
+        present_count = sum(1 for r in records if r.is_present) if records else 0
+        absence_count = total_classes - present_count
+        percentage = (present_count / total_classes * 100) if total_classes > 0 else 0
+        
+        # Group attendance by course
+        course_attendance = {}
+        for record in records:
+            course = record.course_id or 'General'
+            if course not in course_attendance:
+                course_attendance[course] = {'total': 0, 'present': 0}
+            course_attendance[course]['total'] += 1
+            if record.is_present:
+                course_attendance[course]['present'] += 1
+        
+        # Calculate attendance percentage for each course and determine status
+        course_summary = []
+        for course, data in course_attendance.items():
+            course_pct = (data['present'] / data['total'] * 100) if data['total'] > 0 else 0
+            status = 'Good' if course_pct >= 75 else 'Warning'
+            course_summary.append({
+                'course': course,
+                'percentage': round(course_pct, 2),
+                'status': status
+            })
+        
+        # Sort by course name
+        course_summary.sort(key=lambda x: x['course'])
+        
+        # Calculate bunk recommendations (SAS-96)
+        bunk_recommendations = None
+        try:
+            from bunk_recommendations import BunkRecommendationService
+            bunk_recommendations = BunkRecommendationService.calculate_safe_bunks(
+                classes_attended=present_count,
+                total_classes_held=total_classes,
+                total_classes_remaining=10,  # Estimate remaining classes
+                min_attendance=75.0
+            )
+        except Exception as e:
+            # Bunk allowance feature not available
+            pass
+        
+        return render_template('student_dashboard.html',
+                             total_classes=total_classes,
+                             present_count=present_count,
+                             absence_count=absence_count,
+                             attendance_percentage=round(percentage, 2),
+                             course_summary=course_summary,
+                             bunk_recommendations=bunk_recommendations)
+    except Exception as e:
+        # If Attendance table doesn't exist or query fails, use zero values
+        if current_user.is_faculty:
+            return render_template('faculty_dashboard.html',
+                                 total_students=User.query.filter_by(role='student').count(),
+                                 avg_attendance=0,
+                                 total_records=0)
+        else:
+            return render_template('student_dashboard.html',
+                                 total_classes=0,
+                                 present_count=0,
+                                 absence_count=0,
+                                 attendance_percentage=0)
 
 
 # SAS-85: Password Change Endpoint with Strong Password Policy
@@ -321,6 +336,29 @@ def change_password():
             flash('An error occurred while changing password.', 'error')
 
     return render_template('change_password.html')
+
+
+@app.route('/correction-request')
+@login_required
+@require_role('student')
+def correction_request_page():
+    """Render the attendance correction request submission page.
+    
+    Allows students to view and submit correction requests for their attendance.
+    """
+    return render_template('correction_request.html')
+
+
+@app.route('/admin/override-attendance')
+@login_required
+@require_role('admin')
+def admin_override_page():
+    """Render the admin attendance override management page.
+    
+    Allows admins to directly override any student's attendance record
+    with reason tracking and audit trail.
+    """
+    return render_template('admin_override.html')
 
 
 # SAS-85: API Endpoint for Password Strength Validation
@@ -623,6 +661,12 @@ app.register_blueprint(attendance_api_bp)
 
 # SAS-94: Register audit trail API (admin-only)
 app.register_blueprint(audit_api)
+
+# Register correction request API (student submission)
+app.register_blueprint(correction_bp)
+
+# Register admin override API
+app.register_blueprint(admin_override_bp)
 
 # Create DB tables on import to support integration tests and local dev.
 # In production deployments, migrations should be used instead.
