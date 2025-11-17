@@ -76,11 +76,11 @@
             <div class="col-md-4">
                 <div class="stat-card">
                     <div class="d-flex align-items-center justify-content-between mb-3">
-                        <span class="stat-label">Total Classes</span>
+                        <span class="stat-label">Total Attendance Records</span>
                         <i class="bi bi-journal-bookmark text-primary" style="font-size: 1.5rem;"></i>
                     </div>
-                    <p class="stat-value mb-1" data-counter="12">12</p>
-                    <small class="text-muted">Active courses</small>
+                    <p class="stat-value mb-1">{{ total_records }}</p>
+                    <small class="text-muted">Records in system</small>
                 </div>
             </div>
             <div class="col-md-4">
@@ -89,8 +89,8 @@
                         <span class="stat-label">Students</span>
                         <i class="bi bi-people-fill text-success" style="font-size: 1.5rem;"></i>
                     </div>
-                    <p class="stat-value mb-1" data-counter="245">245</p>
-                    <small class="text-muted">Enrolled students</small>
+                    <p class="stat-value mb-1">{{ total_students }}</p>
+                    <small class="text-muted">Active students</small>
                 </div>
             </div>
             <div class="col-md-4">
@@ -99,8 +99,8 @@
                         <span class="stat-label">Avg Attendance</span>
                         <i class="bi bi-graph-up text-info" style="font-size: 1.5rem;"></i>
                     </div>
-                    <p class="stat-value mb-1" data-counter="87">87%</p>
-                    <small class="text-muted">This semester</small>
+                    <p class="stat-value mb-1">{{ avg_attendance }}%</p>
+                    <small class="text-muted">Overall average</small>
                 </div>
             </div>
         </div>
@@ -145,6 +145,45 @@
                 </div>
             </div>
         </div>
+
+        <!-- Admin-Only Features -->
+        {% if current_user.role == 'admin' or current_user.is_faculty %}
+        <div class="row g-4 mt-4">
+            <!-- Attendance Override -->
+            <div class="col-md-6">
+                <div class="card card-glass border-warning">
+                    <div class="card-body">
+                        <h5 class="section-title">
+                            <i class="bi bi-pencil-square text-warning"></i>
+                            Attendance Override
+                        </h5>
+                        <p class="text-muted mb-4">Override student attendance records with audit trail</p>
+                        <div class="d-grid gap-2">
+                            <a href="/admin/override-attendance" class="btn btn-warning"><i class="bi bi-shield-exclamation me-2"></i>Override Attendance</a>
+                            <a href="/admin/override-attendance" class="btn btn-outline-warning"><i class="bi bi-clock-history me-2"></i>View Override History</a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Admin Management (Placeholder for future features) -->
+            <div class="col-md-6">
+                <div class="card card-glass">
+                    <div class="card-body">
+                        <h5 class="section-title">
+                            <i class="bi bi-gear"></i>
+                            Admin Tools
+                        </h5>
+                        <p class="text-muted mb-4">Administrative functions and settings</p>
+                        <div class="d-grid gap-2">
+                            <a href="/admin/override-attendance" class="btn btn-info"><i class="bi bi-bar-chart me-2"></i>Admin Statistics</a>
+                            <a href="/admin/override-attendance" class="btn btn-outline-info"><i class="bi bi-file-earmark me-2"></i>Generate Reports</a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
 
         <div class="row mt-4 g-4">
             <!-- Account Info -->

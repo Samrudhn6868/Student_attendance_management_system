@@ -365,3 +365,59 @@ class Attendance(db.Model):
             self._marked_by = None
         else:
             self._marked_by = encrypt_data(value)
+
+
+class AttendanceCorrectionRequest(db.Model):
+    """Model for attendance correction requests submitted by students.
+    
+    Allows students to request a correction/change to their attendance status
+    for a specific course on a specific date. Tracks request status and reason.
+    
+    Attributes:
+        id (int): Primary key for the request
+        student_id (int): ID of the student submitting the request
+        student_name (str): Name of the student (for easy reference)
+        course_id (str): Course identifier for which correction is requested
+        date (date): Date of the attendance record being corrected
+        current_status (str): Current status of attendance ('present' or 'absent')
+        requested_status (str): Requested new status for attendance
+        reason (str): Reason provided by student for the correction
+        status (str): Status of the request ('pending', 'approved', 'rejected', 'cancelled')
+        submitted_at (datetime): Timestamp when request was submitted
+        reviewed_at (datetime): Timestamp when request was reviewed (nullable)
+        reviewed_by (int): ID of admin/faculty who reviewed (nullable)
+        admin_notes (str): Notes from reviewer (nullable)
+    """
+    id = db.Column(db.Integer, primary_key=True)
+    
+    # Student information
+    student_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    student_name = db.Column(db.String(100), nullable=False)
+    
+    # Attendance details
+    course_id = db.Column(db.String(100), nullable=False)
+    date = db.Column(db.Date, nullable=False)
+    current_status = db.Column(db.String(20), nullable=False)  # 'present' or 'absent'
+    requested_status = db.Column(db.String(20), nullable=False)  # 'present' or 'absent'
+    
+    # Request information
+    reason = db.Column(db.Text, nullable=False)
+    status = db.Column(db.String(20), default='pending', nullable=False)  # pending, approved, rejected, cancelled
+    
+    # Timestamps
+    submitted_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    reviewed_at = db.Column(db.DateTime, nullable=True)
+    
+    # Reviewer information
+    reviewed_by = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    admin_notes = db.Column(db.Text, nullable=True)
+    
+    # Relationship to student
+    student = db.relationship('User', foreign_keys=[student_id], backref='correction_requests')
+    reviewer = db.relationship('User', foreign_keys=[reviewed_by])
+    
+    def __repr__(self):
+        """String representation of correction request."""
+        return (f"<AttendanceCorrectionRequest id={self.id} "
+                f"student={self.student_name} course={self.course_id} "
+                f"date={self.date} status={self.status}>")

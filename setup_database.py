@@ -5,13 +5,15 @@ Run this script after pulling the repository to set up test users.
 
 import sys
 import os
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
 
-from main import app, db, User
+from src.main import app, db
+from src.models import User
 
 def setup_database():
     """Initialize database with test users."""
     
+    # Ensure app context is active
     with app.app_context():
         # Create tables if they don't exist
         db.create_all()

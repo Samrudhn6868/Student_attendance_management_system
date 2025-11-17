@@ -26,7 +26,7 @@ attendance_bp = Blueprint('attendance', __name__, url_prefix='/attendance')
 @login_required
 @require_role('student', 'teacher', 'admin')
 def view_attendance():
-    """View attendance records.
+    """View attendance records from database.
 
     Accessible by: student, teacher, admin
 
@@ -36,72 +36,70 @@ def view_attendance():
     Returns:
         HTML page with attendance data or JSON for API requests
     """
+    from models import User
     user_role = get_user_role()
 
-    # In a real application, you would query attendance records from the database
-    # For this demo, we'll return mock data
-
     if user_role == 'student':
-        # Students see only their own attendance
+        # Students see only their own attendance from database
+        records = Attendance.query.filter_by(student_id=current_user.id).all()
+        
+        attendance_list = []
+        for record in records:
+            attendance_list.append({
+                'date': record.date.isoformat() if record.date else '',
+                'status': 'present' if record.is_present else 'absent',
+                'course_id': record.course_id or 'N/A',
+                'marked_by': record.marked_by or 'Unknown'
+            })
+        
+        # Calculate summary
+        total_classes = len(attendance_list)
+        present_count = sum(1 for a in attendance_list if a['status'] == 'present')
+        absent_count = total_classes - present_count
+        percentage = (present_count / total_classes * 100) if total_classes > 0 else 0
+        
         attendance_data = {
             'user_id': current_user.id,
             'username': current_user.username,
             'name': current_user.name,
-            'attendance': [
-                {'date': '2025-11-01', 'status': 'present', 'subject': 'Mathematics'},
-                {'date': '2025-11-02', 'status': 'present', 'subject': 'Physics'},
-                {'date': '2025-11-03', 'status': 'absent', 'subject': 'Chemistry'},
-                {'date': '2025-11-04', 'status': 'present', 'subject': 'English'},
-                {'date': '2025-11-05', 'status': 'present', 'subject': 'Mathematics'},
-                {'date': '2025-11-06', 'status': 'present', 'subject': 'Physics'},
-                {'date': '2025-11-07', 'status': 'present', 'subject': 'Chemistry'},
-                {'date': '2025-11-08', 'status': 'present', 'subject': 'English'},
-            ],
+            'attendance': attendance_list,
             'summary': {
-                'total_classes': 8,
-                'present': 7,
-                'absent': 1,
-                'percentage': 87.5
+                'total_classes': total_classes,
+                'present': present_count,
+                'absent': absent_count,
+                'percentage': round(percentage, 2)
             }
         }
     else:
-        # Teachers and admins see all attendance
+        # Teachers and admins see all students with attendance from database
+        students = User.query.filter_by(role='student').all()
+        
+        all_students_data = []
+        for student in students:
+            records = Attendance.query.filter_by(student_id=student.id).all()
+            total = len(records)
+            present = sum(1 for r in records if r.is_present)
+            percentage = (present / total * 100) if total > 0 else 0
+            
+            all_students_data.append({
+                'user_id': student.id,
+                'username': student.username,
+                'name': student.name,
+                'total_classes': total,
+                'present': present,
+                'absent': total - present,
+                'percentage': round(percentage, 2)
+            })
+        
+        # Calculate average attendance
+        total_percentages = [s['percentage'] for s in all_students_data]
+        average_attendance = sum(total_percentages) / len(total_percentages) if total_percentages else 0
+        
         attendance_data = {
-            'all_students': [
-                {
-                    'user_id': 1,
-                    'username': 'PES1UG23CS001',
-                    'name': 'Student One',
-                    'percentage': 85.0
-                },
-                {
-                    'user_id': 2,
-                    'username': 'PES1UG23CS002',
-                    'name': 'Student Two',
-                    'percentage': 90.0
-                },
-                {
-                    'user_id': 3,
-                    'username': 'PES1UG23CS003',
-                    'name': 'Student Three',
-                    'percentage': 78.0
-                },
-                {
-                    'user_id': 4,
-                    'username': 'PES1UG23CS004',
-                    'name': 'Student Four',
-                    'percentage': 55.0
-                },
-                {
-                    'user_id': 5,
-                    'username': 'PES1UG23CS005',
-                    'name': 'Student Five',
-                    'percentage': 92.0
-                }
-            ],
+            'all_students': all_students_data,
             'summary': {
-                'total_students': 5,
-                'average_attendance': 80.0
+                'total_students': len(all_students_data),
+                'average_attendance': round(average_attendance, 2)
             }
         }
 
@@ -125,11 +123,11 @@ def view_attendance():
 @login_required
 @require_role('teacher', 'admin')
 def mark_attendance():
-    """Mark attendance for students.
+    """Mark attendance for students from database.
 
     Accessible by: teacher, admin
     
-    GET: Display the attendance marking form
+    GET: Display the attendance marking form with actual students from database
     POST: Process attendance submission
 
     Expected JSON payload:
@@ -143,30 +141,85 @@ def mark_attendance():
     Returns:
         JSON response confirming attendance was marked
     """
+    from models import User
+    
     # If GET request, show the form
     if request.method == 'GET':
-        # Sample students for demo - in production, fetch from database
-        sample_students = [
-            {'id': 1, 'name': 'Student User', 'srn': 'PES1UG21CS001'},
-            {'id': 2, 'name': 'Sample Student 2', 'srn': 'PES1UG21CS002'},
-            {'id': 3, 'name': 'Sample Student 3', 'srn': 'PES1UG21CS003'},
+        # Fetch actual students from database
+        from models import User
+        students = User.query.filter_by(role='student').all()
+        
+        student_list = [
+            {'id': s.id, 'name': s.name, 'srn': s.username}
+            for s in students
         ]
+        
         return render_template('mark_attendance.html', 
                              today=datetime.now().strftime('%Y-%m-%d'),
-                             students=sample_students)
+                             students=student_list)
     
     user_role = get_user_role()
 
-    # Handle form submission (from web form)
-    if request.form:
-        absentees = request.form.getlist('absentees')
-        # In production, save to database here
-        flash(f'Attendance marked successfully! {len(absentees)} student(s) marked absent.', 'success')
-        return redirect(url_for('attendance.mark_attendance'))
-    
-    # Handle JSON API requests
-    data = request.get_json() or {}
+    # Handle form submission (from web form) - check Content-Type FIRST
+    if request.method == 'POST':
+        # Form submission from HTML form
+        if request.content_type and 'application/x-www-form-urlencoded' in request.content_type:
+            absentees = request.form.getlist('absentees')
+            attendance_date = request.form.get('date', datetime.now().strftime('%Y-%m-%d'))
+            course_id = request.form.get('course_id', 'General')
+            
+            # Get all students to mark attendance
+            from models import User
+            all_students = User.query.filter_by(role='student').all()
+            
+            # Save attendance for all students
+            for student in all_students:
+                # Determine if student is present or absent
+                is_present = str(student.id) not in absentees
+                status = 'present' if is_present else 'absent'
+                
+                # Create or update attendance record
+                attendance_record = Attendance(
+                    student_id=student.id,
+                    student_srn=student.username,
+                    course_id=course_id,
+                    date=datetime.strptime(attendance_date, '%Y-%m-%d').date(),
+                    status=status,
+                    is_present=is_present,
+                    marked_by=current_user.username
+                )
+                db.session.add(attendance_record)
+            
+            try:
+                db.session.commit()
+                flash(f'Attendance marked successfully! {len(absentees)} student(s) marked absent.', 'success')
+            except Exception as e:
+                db.session.rollback()
+                flash(f'Error saving attendance: {str(e)}', 'danger')
+            
+            return redirect(url_for('attendance.mark_attendance'))
+        
+        # JSON API request
+        elif request.content_type and 'application/json' in request.content_type:
+            data = request.get_json(force=True, silent=True) or {}
+        
+        # Unsupported content type
+        else:
+            return jsonify({
+                'success': False,
+                'error': 'Unsupported Media Type',
+                'message': 'Content-Type must be either "application/x-www-form-urlencoded" (for form) or "application/json" (for API)',
+                'received': request.content_type
+            }), 415
+    else:
+        # GET request or other method - not expected here for API
+        return jsonify({
+            'success': False,
+            'error': 'Method Not Allowed',
+            'message': 'POST requests are required for this endpoint'
+        }), 405
 
+    # Process JSON API request
     student_id = data.get('student_id')
     subject = data.get('subject')
     date = data.get('date')
@@ -187,29 +240,70 @@ def mark_attendance():
             'message': 'Status must be either "present" or "absent"'
         }), 400
 
-    # In a real application, you would:
-    # 1. Verify the student exists
-    # 2. Check if teacher is authorized to mark attendance for this subject
-    # 3. Save the attendance record to database
+    # Verify student exists in database
+    from models import User
+    student = User.query.get(student_id)
+    if not student or student.role != 'student':
+        return jsonify({
+            'success': False,
+            'error': 'Invalid student',
+            'message': 'Student not found or is not a student user'
+        }), 404
 
-    # For this demo, we'll just return a success response
-    return jsonify({
-        'success': True,
-        'message': 'Attendance marked successfully',
-        'marked_by': {
-            'user_id': current_user.id,
-            'username': current_user.username,
-            'name': current_user.name,
-            'role': user_role
-        },
-        'attendance': {
-            'student_id': student_id,
-            'subject': subject,
-            'date': date,
-            'status': status,
-            'timestamp': '2025-11-08T10:30:00Z'
-        }
-    }), 201
+    # Check if attendance already exists for this student/date/course
+    from datetime import datetime as dt
+    attendance_date = dt.strptime(date, '%Y-%m-%d').date()
+    existing_attendance = Attendance.query.filter_by(
+        student_id=student_id,
+        date=attendance_date,
+        course_id=subject
+    ).first()
+    
+    if existing_attendance:
+        # Update existing record
+        existing_attendance.status = status
+        existing_attendance.is_present = (status == 'present')
+        existing_attendance.marked_by = current_user.username
+    else:
+        # Create new attendance record
+        attendance_record = Attendance(
+            student_id=student_id,
+            student_srn=student.username,
+            course_id=subject,
+            date=attendance_date,
+            status=status,
+            is_present=(status == 'present'),
+            marked_by=current_user.username
+        )
+        db.session.add(attendance_record)
+    
+    try:
+        db.session.commit()
+        return jsonify({
+            'success': True,
+            'message': 'Attendance marked successfully',
+            'marked_by': {
+                'user_id': current_user.id,
+                'username': current_user.username,
+                'name': current_user.name,
+                'role': user_role
+            },
+            'attendance': {
+                'student_id': student_id,
+                'student_name': student.name,
+                'subject': subject,
+                'date': date,
+                'status': status,
+                'timestamp': datetime.utcnow().isoformat()
+            }
+        }), 201
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({
+            'success': False,
+            'error': 'Database error',
+            'message': str(e)
+        }), 500
 
 
 @attendance_bp.route('/override', methods=['PUT'])
