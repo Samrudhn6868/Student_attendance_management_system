@@ -105,6 +105,11 @@ def _require_fernet() -> Fernet:
     return _FERNET
 
 
+# TODO-PERFORMANCE: Consider caching frequently encrypted values (like course IDs)
+# Use LRU cache with @functools.lru_cache(maxsize=1024) for deterministic inputs
+# WARNING: Only cache if the same plaintext always needs same ciphertext (not recommended
+# for security, but course IDs are re-encrypted often and don't change)
+# Example: @functools.lru_cache(maxsize=1024)
 def encrypt_data(plaintext: str) -> str:
     """Encrypt plaintext and return URL-safe base64 ciphertext string.
 

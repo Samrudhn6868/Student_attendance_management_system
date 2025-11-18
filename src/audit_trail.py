@@ -304,6 +304,12 @@ def audit_attendance_action(action_type):
     return decorator
 
 
+# TODO-PERFORMANCE: Add database indexes on commonly queried columns:
+# CREATE INDEX idx_audit_action ON audit_log(action_type);
+# CREATE INDEX idx_audit_timestamp ON audit_log(timestamp);
+# CREATE INDEX idx_audit_user ON audit_log(user_id);
+# CREATE INDEX idx_audit_student ON audit_log(student_srn);
+# This will significantly improve query performance for filtered searches
 def get_audit_logs(filters=None, start_date=None, end_date=None,
                    user_id=None, student_srn=None, course_id=None,
                    action_type=None, limit=100, offset=0):

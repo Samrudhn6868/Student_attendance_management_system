@@ -24,6 +24,9 @@ class BunkRecommendationService:
     DEFAULT_MIN_ATTENDANCE = 75.0  # Minimum required attendance percentage
     DEFAULT_TARGET_ATTENDANCE = 80.0  # Target attendance to maintain safety buffer
 
+    # TODO-PERFORMANCE: These calculations are pure functions - add memoization
+    # Use @functools.lru_cache(maxsize=512) to cache results for same inputs
+    # Calculations are CPU-intensive but results are deterministic
     @staticmethod
     def calculate_safe_bunks(
         classes_attended: int,
