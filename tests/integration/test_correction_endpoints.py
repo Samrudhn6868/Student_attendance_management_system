@@ -5,7 +5,7 @@ sys.path.insert(0, 'src')
 
 from main import app, db
 from models import User, AttendanceCorrectionRequest
-from datetime import datetime
+from datetime import datetime, date as date_type
 
 app.config['TESTING'] = True
 
@@ -65,12 +65,18 @@ with app.app_context():
             ).first()
             
             if record:
-                record_id, sid, date, is_present = record
+                record_id, sid, date_str, is_present = record
                 status = 'present' if is_present else 'absent'
                 requested_status = 'absent' if is_present else 'present'
                 
+                # Convert string date to date object
+                if isinstance(date_str, str):
+                    date_obj = datetime.strptime(date_str, '%Y-%m-%d').date()
+                else:
+                    date_obj = date_str
+                
                 print(f"✓ Found attendance record:")
-                print(f"  Date: {date}")
+                print(f"  Date: {date_obj}")
                 print(f"  Current Status: {status}")
                 print(f"  Requested Status: {requested_status}")
                 
@@ -79,7 +85,7 @@ with app.app_context():
                     student_id=student.id,
                     student_name=student.name,
                     course_id=f"Course_{record_id}",
-                    date=date,
+                    date=date_obj,
                     current_status=status,
                     requested_status=requested_status,
                     reason="This is a test correction request with enough characters to pass validation.",
