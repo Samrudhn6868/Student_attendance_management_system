@@ -10,6 +10,7 @@ attendance_bp = Blueprint('attendance', __name__)
 @login_required
 @require_role('teacher', 'admin')
 def mark_attendance():
+    """Handle faculty attendance marking interface (GET/POST)."""
     students = db.session.execute(
         db.select(User).filter_by(is_faculty=False)
     ).scalars().all()

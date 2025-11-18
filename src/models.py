@@ -304,10 +304,12 @@ class Attendance(db.Model):
 
     @student_srn.comparator
     def student_srn(cls):
+        """Return hash comparator for encrypted student SRN."""
         return cls._HashComparator(cls.student_srn_hash)
 
     @hybrid_property
     def course_id(self):
+        """Decrypt and return course ID."""
         if self._course_id:
             try:
                 return decrypt_data(self._course_id)
@@ -317,6 +319,7 @@ class Attendance(db.Model):
 
     @course_id.setter
     def course_id(self, value):
+        """Encrypt and set course ID."""
         if value is None:
             self._course_id = None
             self.course_id_hash = None
@@ -326,6 +329,7 @@ class Attendance(db.Model):
 
     @course_id.comparator
     def course_id(cls):
+        """Return hash comparator for encrypted course ID."""
         return cls._HashComparator(cls.course_id_hash)
 
     @hybrid_property
@@ -348,10 +352,12 @@ class Attendance(db.Model):
 
     @status.comparator
     def status(cls):
+        """Return hash comparator for encrypted attendance status."""
         return cls._HashComparator(cls.status_hash)
 
     @hybrid_property
     def marked_by(self):
+        """Decrypt and return the name of faculty who marked attendance."""
         if self._marked_by:
             try:
                 return decrypt_data(self._marked_by)
@@ -361,6 +367,7 @@ class Attendance(db.Model):
 
     @marked_by.setter
     def marked_by(self, value):
+        """Encrypt and set the name of faculty who marked attendance."""
         if value is None:
             self._marked_by = None
         else:

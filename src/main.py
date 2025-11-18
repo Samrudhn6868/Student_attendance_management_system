@@ -705,6 +705,7 @@ with app.app_context():
                 reset_pw = bool(os.getenv('RESET_DEMO_PASSWORDS'))
 
                 def ensure_user(username, name, is_faculty, role, password):
+                    """Create or update a demo user account."""
                     user = db.session.execute(
                         db.select(User).filter_by(username=username)
                     ).scalar_one_or_none()

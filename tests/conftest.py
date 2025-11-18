@@ -115,9 +115,10 @@ def app():
         
         yield test_app
         
-        # Cleanup
+        # Cleanup - properly close all connections
         test_db.session.remove()
         test_db.drop_all()
+        test_db.engine.dispose()  # Close all database connections
 
 
 @pytest.fixture
