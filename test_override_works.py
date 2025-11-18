@@ -17,6 +17,18 @@ def test_admin_override_attendance_works():
     client = app.test_client()
     
     with app.app_context():
+        # Clean up any existing test users from previous runs
+        existing_admin = User.query.filter_by(username='admin_override_test').first()
+        if existing_admin:
+            db.session.delete(existing_admin)
+            db.session.commit()
+        existing_student = User.query.filter_by(username='student_override_test').first()
+        if existing_student:
+            # Remove any existing attendance records for this student for a clean slate
+            Attendance.query.filter_by(student_id=existing_student.id).delete()
+            db.session.delete(existing_student)
+            db.session.commit()
+
         # Create test users
         admin = User(
             username='admin_override_test',

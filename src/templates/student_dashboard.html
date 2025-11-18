@@ -157,11 +157,11 @@
                                         </div>
                                         <div class="progress mt-2" style="height: 8px;">
                                             {% if course.percentage >= 80 %}
-                                                <div class="progress-bar bg-success" role="progressbar" style="width: {{ course.percentage }}%" aria-valuenow="{{ course.percentage }}" aria-valuemin="0" aria-valuemax="100"></div>
+                                                <div class="progress-bar bg-success" role="progressbar" aria-valuenow="{{ course.percentage }}" aria-valuemin="0" aria-valuemax="100" data-percentage="{{ course.percentage }}"></div>
                                             {% elif course.percentage >= 75 %}
-                                                <div class="progress-bar bg-info" role="progressbar" style="width: {{ course.percentage }}" aria-valuenow="{{ course.percentage }}" aria-valuemin="0" aria-valuemax="100"></div>
+                                                <div class="progress-bar bg-info" role="progressbar" aria-valuenow="{{ course.percentage }}" aria-valuemin="0" aria-valuemax="100" data-percentage="{{ course.percentage }}"></div>
                                             {% else %}
-                                                <div class="progress-bar bg-danger" role="progressbar" style="width: {{ course.percentage }}%" aria-valuenow="{{ course.percentage }}" aria-valuemin="0" aria-valuemax="100"></div>
+                                                <div class="progress-bar bg-danger" role="progressbar" aria-valuenow="{{ course.percentage }}" aria-valuemin="0" aria-valuemax="100" data-percentage="{{ course.percentage }}"></div>
                                             {% endif %}
                                         </div>
                                         <div class="d-flex justify-content-between mt-2">
@@ -371,5 +371,14 @@
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
     <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+    <script>
+        // Set progress bar widths from data attributes
+        document.addEventListener('DOMContentLoaded', function() {
+            document.querySelectorAll('.progress-bar[data-percentage]').forEach(function(bar) {
+                var percentage = bar.getAttribute('data-percentage');
+                bar.style.width = percentage + '%';
+            });
+        });
+    </script>
 </body>
 </html>

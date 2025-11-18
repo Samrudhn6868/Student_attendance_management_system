@@ -51,6 +51,9 @@ from audit_api import audit_api
 # Import correction request API
 from correction_request_api import correction_bp
 
+# SAS-99: Import teacher review API
+from teacher_review_api import teacher_review_bp
+
 # Import admin override API
 from admin_override_api import admin_override_bp
 
@@ -347,6 +350,19 @@ def correction_request_page():
     Allows students to view and submit correction requests for their attendance.
     """
     return render_template('correction_request.html')
+
+
+# SAS-99: Teacher review page for correction requests
+@app.route('/teacher/review-requests')
+@login_required
+@require_role('teacher', 'admin')
+def teacher_review_page():
+    """Render the teacher review page for correction requests.
+    
+    Allows teachers to review, approve, or deny student correction requests
+    within a 48-hour window.
+    """
+    return render_template('teacher_review.html')
 
 
 @app.route('/admin/override-attendance')
@@ -664,6 +680,9 @@ app.register_blueprint(audit_api)
 
 # Register correction request API (student submission)
 app.register_blueprint(correction_bp)
+
+# SAS-99: Register teacher review API (teacher approval/denial)
+app.register_blueprint(teacher_review_bp)
 
 # Register admin override API
 app.register_blueprint(admin_override_bp)
