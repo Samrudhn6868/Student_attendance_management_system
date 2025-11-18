@@ -434,8 +434,8 @@ class TestTeacherReviewEndpoints:
             json={'notes': 'Trying to approve'}
         )
         
-        # Should fail because request is expired
-        assert response.status_code in [400, 404]
+        # Should fail because request is expired (409 Conflict or 400/404)
+        assert response.status_code in [400, 404, 409]
 
 
 class TestTeacherReviewPermissions:

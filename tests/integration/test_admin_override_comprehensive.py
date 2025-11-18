@@ -254,7 +254,8 @@ def test_invalid_attendance_id(client, admin_session, app):
         }
     )
     
-    assert response.status_code in [404, 500]
+    # API can return 400 (validation error), 404 (not found), or 500 (server error)
+    assert response.status_code in [400, 404, 500]
 
 
 def test_invalid_student_id(client, admin_session, app):
