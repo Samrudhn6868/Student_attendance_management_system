@@ -49,7 +49,7 @@ class TaskRunner:
     
     def run_command(self, command: str, shell: bool = True) -> int:
         """Run a shell command and return exit code."""
-        print(f"\n▶ Running: {command}\n")
+        print(f"\n> Running: {command}\n")
         result = subprocess.run(command, shell=shell, cwd=self.project_root)
         return result.returncode
     
