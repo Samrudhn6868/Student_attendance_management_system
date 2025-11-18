@@ -382,7 +382,7 @@ class AttendanceCorrectionRequest(db.Model):
         current_status (str): Current status of attendance ('present' or 'absent')
         requested_status (str): Requested new status for attendance
         reason (str): Reason provided by student for the correction
-        status (str): Status of the request ('pending', 'approved', 'rejected', 'cancelled')
+        status (str): Status of the request ('pending', 'approved', 'rejected', 'cancelled', 'expired')
         submitted_at (datetime): Timestamp when request was submitted
         reviewed_at (datetime): Timestamp when request was reviewed (nullable)
         reviewed_by (int): ID of admin/faculty who reviewed (nullable)
