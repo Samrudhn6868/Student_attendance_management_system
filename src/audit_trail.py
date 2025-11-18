@@ -60,34 +60,34 @@ class AuditLog(db.Model):
     Note: Fields prefixed with _ are encrypted at rest. Use properties to access.
     """
     __tablename__ = 'audit_log'
-    
+
     id = db.Column(db.Integer, primary_key=True)
-    
+
     # User information (not encrypted - needed for queries)
     user_id = db.Column(db.Integer, nullable=True, index=True)
     username = db.Column(db.String(80), nullable=True)
     user_role = db.Column(db.String(20), nullable=True)
-    
+
     # Action details
     action_type = db.Column(db.String(20), nullable=False, index=True)
     record_type = db.Column(db.String(50), nullable=False, default='attendance')
     record_id = db.Column(db.Integer, nullable=True, index=True)
-    
+
     # Timestamp and tracking
     timestamp = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, index=True)
-    
+
     # ENCRYPTED FIELDS (sensitive data at rest)
     _ip_address = db.Column('ip_address', db.String(500), nullable=True)  # Encrypted
     _changes = db.Column('changes', db.Text, nullable=True)  # Encrypted JSON
     _old_values = db.Column('old_values', db.Text, nullable=True)  # Encrypted JSON
     _new_values = db.Column('new_values', db.Text, nullable=True)  # Encrypted JSON
     _reason = db.Column('reason', db.String(1000), nullable=True)  # Encrypted
-    
+
     # Attendance-specific fields for quick filtering (not encrypted)
     student_srn = db.Column(db.String(50), nullable=True, index=True)
     course_id = db.Column(db.String(50), nullable=True, index=True)
     attendance_date = db.Column(db.String(20), nullable=True, index=True)
-    
+
     # Properties for transparent encryption/decryption
     @property
     def ip_address(self):
@@ -98,7 +98,7 @@ class AuditLog(db.Model):
             except Exception:
                 return '[DECRYPTION_ERROR]'
         return None
-    
+
     @ip_address.setter
     def ip_address(self, value):
         """Encrypt IP address."""
@@ -106,7 +106,7 @@ class AuditLog(db.Model):
             self._ip_address = encrypt_data(value)
         else:
             self._ip_address = None
-    
+
     @property
     def changes(self):
         """Decrypt changes."""
@@ -117,7 +117,7 @@ class AuditLog(db.Model):
             except Exception:
                 return None
         return None
-    
+
     @changes.setter
     def changes(self, value):
         """Encrypt changes (JSON string)."""
@@ -128,7 +128,7 @@ class AuditLog(db.Model):
             self._changes = encrypt_data(value)
         else:
             self._changes = None
-    
+
     @property
     def old_values(self):
         """Decrypt old values."""
@@ -138,7 +138,7 @@ class AuditLog(db.Model):
             except Exception:
                 return None
         return None
-    
+
     @old_values.setter
     def old_values(self, value):
         """Encrypt old values (JSON string)."""
@@ -148,7 +148,7 @@ class AuditLog(db.Model):
             self._old_values = encrypt_data(value)
         else:
             self._old_values = None
-    
+
     @property
     def new_values(self):
         """Decrypt new values."""
@@ -158,7 +158,7 @@ class AuditLog(db.Model):
             except Exception:
                 return None
         return None
-    
+
     @new_values.setter
     def new_values(self, value):
         """Encrypt new values (JSON string)."""
@@ -168,7 +168,7 @@ class AuditLog(db.Model):
             self._new_values = encrypt_data(value)
         else:
             self._new_values = None
-    
+
     @property
     def reason(self):
         """Decrypt reason."""
@@ -178,7 +178,7 @@ class AuditLog(db.Model):
             except Exception:
                 return '[DECRYPTION_ERROR]'
         return None
-    
+
     @reason.setter
     def reason(self, value):
         """Encrypt reason."""
@@ -188,11 +188,11 @@ class AuditLog(db.Model):
             self._reason = encrypt_data(value)
         else:
             self._reason = None
-    
+
     def __repr__(self):
         return (f"<AuditLog {self.id}: {self.action_type} by {self.username} "
                 f"at {self.timestamp}>")
-    
+
     def to_dict(self):
         """Convert audit log to dictionary for API responses."""
         return {
@@ -235,10 +235,10 @@ def create_audit_entry(action_type, record_type='attendance', record_id=None,
     user_id = current_user.id if current_user.is_authenticated else None
     username = current_user.username if current_user.is_authenticated else 'system'
     user_role = getattr(current_user, 'role', 'unknown') if current_user.is_authenticated else 'system'
-    
+
     # Get IP address
     ip_address = request.remote_addr if request else None
-    
+
     # Calculate changes
     changes = None
     if old_values and new_values:
@@ -248,7 +248,7 @@ def create_audit_entry(action_type, record_type='attendance', record_id=None,
             new_val = new_values.get(key)
             if old_val != new_val:
                 changes[key] = {'old': old_val, 'new': new_val}
-    
+
     # Create audit entry
     audit_entry = AuditLog(
         user_id=user_id,
@@ -266,10 +266,10 @@ def create_audit_entry(action_type, record_type='attendance', record_id=None,
         attendance_date=kwargs.get('attendance_date'),
         reason=reason
     )
-    
+
     db.session.add(audit_entry)
     db.session.commit()
-    
+
     return audit_entry
 
 
@@ -290,7 +290,7 @@ def audit_attendance_action(action_type):
         def wrapper(*args, **kwargs):
             # Execute the original function
             result = func(*args, **kwargs)
-            
+
             # Extract audit information from result
             if isinstance(result, dict) and 'audit_info' in result:
                 audit_info = result['audit_info']
@@ -298,13 +298,13 @@ def audit_attendance_action(action_type):
                     action_type=action_type,
                     **audit_info
                 )
-            
+
             return result
         return wrapper
     return decorator
 
 
-def get_audit_logs(filters=None, start_date=None, end_date=None, 
+def get_audit_logs(filters=None, start_date=None, end_date=None,
                    user_id=None, student_srn=None, course_id=None,
                    action_type=None, limit=100, offset=0):
     """Retrieve audit logs with optional filters.
@@ -324,40 +324,40 @@ def get_audit_logs(filters=None, start_date=None, end_date=None,
         tuple: (list of AuditLog entries, total count)
     """
     query = AuditLog.query
-    
+
     # Apply filters
     if start_date:
         query = query.filter(AuditLog.timestamp >= start_date)
-    
+
     if end_date:
         query = query.filter(AuditLog.timestamp <= end_date)
-    
+
     if user_id:
         query = query.filter(AuditLog.user_id == user_id)
-    
+
     if student_srn:
         query = query.filter(AuditLog.student_srn == student_srn)
-    
+
     if course_id:
         query = query.filter(AuditLog.course_id == course_id)
-    
+
     if action_type:
         query = query.filter(AuditLog.action_type == action_type)
-    
+
     if filters:
         for key, value in filters.items():
             if hasattr(AuditLog, key):
                 query = query.filter(getattr(AuditLog, key) == value)
-    
+
     # Get total count
     total_count = query.count()
-    
+
     # Apply pagination and ordering
     logs = query.order_by(AuditLog.timestamp.desc())\
                .limit(limit)\
                .offset(offset)\
                .all()
-    
+
     return logs, total_count
 
 
@@ -384,7 +384,7 @@ def generate_audit_report(start_date=None, end_date=None, user_id=None,
         course_id=course_id,
         limit=10000  # High limit for reports
     )
-    
+
     if format == 'json':
         return {
             'total_records': total_count,
@@ -397,16 +397,16 @@ def generate_audit_report(start_date=None, end_date=None, user_id=None,
             },
             'logs': [log.to_dict() for log in logs]
         }
-    
+
     elif format == 'summary':
         # Generate summary statistics
         action_counts = {}
         user_counts = {}
-        
+
         for log in logs:
             action_counts[log.action_type] = action_counts.get(log.action_type, 0) + 1
             user_counts[log.username] = user_counts.get(log.username, 0) + 1
-        
+
         return {
             'total_records': total_count,
             'date_range': {
@@ -421,17 +421,17 @@ def generate_audit_report(start_date=None, end_date=None, user_id=None,
                 'course_id': course_id
             }
         }
-    
+
     elif format == 'csv':
         # Generate CSV format
         import io
         output = io.StringIO()
-        
+
         # Header
-        headers = ['ID', 'Timestamp', 'Username', 'Role', 'Action', 'Student SRN', 
+        headers = ['ID', 'Timestamp', 'Username', 'Role', 'Action', 'Student SRN',
                   'Course ID', 'Date', 'Reason', 'IP Address']
         output.write(','.join(headers) + '\n')
-        
+
         # Data rows
         for log in logs:
             row = [
@@ -447,9 +447,9 @@ def generate_audit_report(start_date=None, end_date=None, user_id=None,
                 log.ip_address or ''
             ]
             output.write(','.join(row) + '\n')
-        
+
         return output.getvalue()
-    
+
     else:
         raise ValueError(f"Unsupported format: {format}")
 
@@ -468,7 +468,7 @@ def log_attendance_creation(attendance_record, reason=None):
         'status': attendance_record.status,
         'marked_by': attendance_record.marked_by
     }
-    
+
     create_audit_entry(
         action_type='CREATE',
         record_type='attendance',
@@ -498,7 +498,7 @@ def log_attendance_update(attendance_record, old_values, reason=None):
         'is_overridden': attendance_record.is_overridden,
         'override_reason': attendance_record.override_reason
     }
-    
+
     create_audit_entry(
         action_type='UPDATE',
         record_type='attendance',
@@ -526,7 +526,7 @@ def log_attendance_deletion(attendance_record, reason=None):
         'status': attendance_record.status,
         'marked_by': attendance_record.marked_by
     }
-    
+
     create_audit_entry(
         action_type='DELETE',
         record_type='attendance',

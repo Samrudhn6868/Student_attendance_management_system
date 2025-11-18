@@ -70,7 +70,7 @@ basedir = os.path.abspath(os.path.dirname(__file__))
 instance_dir = os.path.join(basedir, "instance")
 os.makedirs(instance_dir, exist_ok=True)
 app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv(
-    'DATABASE_URL', 
+    'DATABASE_URL',
     f'sqlite:///{os.path.join(instance_dir, "attendance.db")}'
 )
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
@@ -163,7 +163,7 @@ def login():
             # Failed login attempt
             user.record_failed_login()
             remaining_attempts = 3 - user.failed_login_attempts
-            
+
             if user.account_locked:
                 flash(
                     'Account locked due to multiple failed login attempts. '
@@ -196,13 +196,13 @@ def logout():
 def dashboard():
     """Show faculty or student dashboard depending on role with real database data."""
     from models import Attendance
-    
+
     try:
         if current_user.is_faculty:
             # Faculty/Admin dashboard with real stats
             total_students = User.query.filter_by(role='student').count()
             total_attendance_records = Attendance.query.count()
-            
+
             # Calculate average attendance percentage
             all_students = User.query.filter_by(role='student').all()
             attendance_percentages = []
@@ -212,22 +212,22 @@ def dashboard():
                     present = sum(1 for r in records if r.is_present)
                     percentage = (present / len(records) * 100) if records else 0
                     attendance_percentages.append(percentage)
-            
+
             avg_attendance = sum(attendance_percentages) / len(attendance_percentages) if attendance_percentages else 0
-            
-            return render_template('faculty_dashboard.html', 
+
+            return render_template('faculty_dashboard.html',
                                  total_students=total_students,
                                  avg_attendance=round(avg_attendance, 2),
                                  total_records=total_attendance_records)
-        
+
         # Student dashboard with real stats
         records = Attendance.query.filter_by(student_id=current_user.id).all()
-        
+
         total_classes = len(records)
         present_count = sum(1 for r in records if r.is_present) if records else 0
         absence_count = total_classes - present_count
         percentage = (present_count / total_classes * 100) if total_classes > 0 else 0
-        
+
         # Group attendance by course
         course_attendance = {}
         for record in records:
@@ -237,7 +237,7 @@ def dashboard():
             course_attendance[course]['total'] += 1
             if record.is_present:
                 course_attendance[course]['present'] += 1
-        
+
         # Calculate attendance percentage for each course and determine status
         course_summary = []
         for course, data in course_attendance.items():
@@ -248,10 +248,10 @@ def dashboard():
                 'percentage': round(course_pct, 2),
                 'status': status
             })
-        
+
         # Sort by course name
         course_summary.sort(key=lambda x: x['course'])
-        
+
         # Calculate bunk recommendations (SAS-96)
         bunk_recommendations = None
         try:
@@ -265,7 +265,7 @@ def dashboard():
         except Exception as e:
             # Bunk allowance feature not available
             pass
-        
+
         return render_template('student_dashboard.html',
                              total_classes=total_classes,
                              present_count=present_count,
@@ -294,7 +294,7 @@ def dashboard():
 def change_password():
     """Allow users to change their password with strong password validation."""
     from password_security import validate_password_strength, PasswordStrengthError
-    
+
     if request.method == 'POST':
         current_password = request.form.get('current_password')
         new_password = request.form.get('new_password')
@@ -385,7 +385,7 @@ def validate_password_api():
     Returns JSON with validation result and detailed requirements.
     """
     from password_security import validate_password_strength
-    
+
     data = request.get_json()
     password = data.get('password', '')
 
@@ -396,7 +396,7 @@ def validate_password_api():
         }), 400
 
     is_valid, error_msg = validate_password_strength(password)
-    
+
     # Calculate password strength score
     strength_score = 0
     checks = {
@@ -406,7 +406,7 @@ def validate_password_api():
         'digit': bool(re.search(r'[0-9]', password)),
         'special': bool(re.search(r'[!@#$%^&*(),.?":{}|<>_\-+=\[\]\\\/;~`]', password))
     }
-    
+
     strength_score = sum(checks.values())
     strength_level = 'weak'
     if strength_score == 5:
