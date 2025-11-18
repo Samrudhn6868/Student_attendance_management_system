@@ -59,11 +59,14 @@ def test_correction_endpoints():
                     print(f"  Current Status: {status}")
                     print(f"  Requested Status: {requested_status}")
                     
+                    # Get course_id - use encrypted value or fallback to test course
+                    course_id = attendance.course_id or "UE20CS101"
+                    
                     # Create correction request - date is already proper type from ORM
                     req = AttendanceCorrectionRequest(
                         student_id=student.id,
                         student_name=student.name,
-                        course_id=attendance.course_id if hasattr(attendance, 'course_id') else f"Course_{attendance.id}",
+                        course_id=course_id,
                         date=attendance.date,
                         current_status=status,
                         requested_status=requested_status,
