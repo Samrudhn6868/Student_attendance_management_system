@@ -3,12 +3,13 @@
 import sys
 sys.path.insert(0, 'src')
 
-from main import app, db
-from models import User, AttendanceCorrectionRequest
 from datetime import datetime, date as date_type
 
 def test_correction_endpoints():
     """Test correction request endpoints and functionality."""
+    from main import app, db
+    from models import User, AttendanceCorrectionRequest
+    
     app.config['TESTING'] = True
 
     with app.app_context():
