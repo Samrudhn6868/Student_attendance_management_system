@@ -123,7 +123,7 @@ class TaskRunner:
     
     def clean(self):
         """Remove generated files and caches."""
-        print("\n▶ Cleaning generated files and caches...\n")
+        print("\n> Cleaning generated files and caches...\n")
         
         patterns = [
             '**/__pycache__',
@@ -154,7 +154,7 @@ class TaskRunner:
                 except Exception as e:
                     print(f"  Error deleting {path}: {e}")
         
-        print("\n✓ Cleanup complete\n")
+        print("\n[OK] Cleanup complete\n")
         return 0
     
     def help(self):
@@ -183,7 +183,7 @@ class TaskRunner:
         }
         
         if task_name not in tasks:
-            print(f"❌ Error: Unknown task '{task_name}'")
+            print(f"[ERROR] Unknown task '{task_name}'")
             print("\nAvailable tasks:")
             for task in sorted(tasks.keys()):
                 print(f"  - {task}")
@@ -196,7 +196,7 @@ class TaskRunner:
 def main():
     """Main entry point."""
     if len(sys.argv) < 2:
-        print("❌ Error: No task specified")
+        print("[ERROR] No task specified")
         print("\nUsage: python make.py <task>")
         print("Run 'python make.py help' for available tasks")
         return 1
@@ -206,9 +206,9 @@ def main():
     exit_code = runner.run(task_name)
     
     if exit_code == 0:
-        print(f"\n✓ Task '{task_name}' completed successfully\n")
+        print(f"\n[OK] Task '{task_name}' completed successfully\n")
     else:
-        print(f"\n❌ Task '{task_name}' failed with exit code {exit_code}\n")
+        print(f"\n[FAILED] Task '{task_name}' failed with exit code {exit_code}\n")
     
     return exit_code
 
