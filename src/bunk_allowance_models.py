@@ -49,7 +49,7 @@ class CourseConfig(db.Model):
     bunk_allowance_percentage = db.Column(db.Float, nullable=False, default=25.0)
     min_attendance_percentage = db.Column(db.Float, nullable=False, default=75.0)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, 
+    updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow,
                           onupdate=datetime.utcnow)
 
     def __repr__(self):
@@ -152,16 +152,16 @@ class StudentBunkAllowance(db.Model):
         """
         # Calculate current stats
         self.current_attendance_percentage = self.calculate_attendance_percentage()
-        
+
         # Calculate remaining bunk allowance
         max_bunks = course_config.get_max_bunk_allowed()
         self.remaining_bunk_allowance = max(0, max_bunks - self.classes_missed)
-        
+
         # Check if attendance is critical
         self.is_attendance_critical = (
             self.current_attendance_percentage < course_config.min_attendance_percentage
         )
-        
+
         self.last_updated = datetime.utcnow()
 
     def to_dict(self):

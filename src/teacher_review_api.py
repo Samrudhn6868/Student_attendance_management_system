@@ -40,13 +40,13 @@ def get_pending_requests():
     try:
         # Calculate 48-hour cutoff time
         cutoff_time = datetime.utcnow() - timedelta(hours=48)
-        
+
         # Auto-expire old pending requests
         expired_requests = AttendanceCorrectionRequest.query.filter(
             AttendanceCorrectionRequest.status == 'pending',
             AttendanceCorrectionRequest.submitted_at < cutoff_time
         ).all()
-        
+
         for req in expired_requests:
             req.status = 'expired'
             req.admin_notes = 'Request expired - not reviewed within 48 hours'
@@ -58,7 +58,7 @@ def get_pending_requests():
                 new_values={'status': 'expired'},
                 reason='auto_expired_48h'
             )
-        
+
         if expired_requests:
             db.session.commit()
 
@@ -72,7 +72,7 @@ def get_pending_requests():
             # Calculate time remaining
             time_elapsed = datetime.utcnow() - req.submitted_at
             hours_remaining = 48 - (time_elapsed.total_seconds() / 3600)
-            
+
             requests_data.append({
                 'id': req.id,
                 'student_id': req.student_id,
@@ -154,7 +154,7 @@ def approve_request(request_id):
         # Update attendance record
         new_status = correction_request.requested_status
         is_present = (new_status == 'present')
-        
+
         # Update the attendance record in database
         result = db.session.execute(
             text("""

@@ -65,12 +65,40 @@ load_dotenv()
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'your-secret-key-here')
 app.config['SITE_NAME'] = os.getenv('SITE_NAME', 'PESU Attendance')
+
+# SAS-INSTRUMENTATION: Enable request timing and logging
+import time
+from flask import g
+
+@app.before_request
+def before_request():
+    """Record request start time for performance monitoring."""
+    g.start_time = time.perf_counter()
+    g.request_path = request.path
+    g.request_method = request.method
+
+@app.after_request
+def after_request(response):
+    """Log request performance metrics."""
+    if hasattr(g, 'start_time'):
+        elapsed = time.perf_counter() - g.start_time
+        
+        # Log slow requests (>1 second)
+        if elapsed > 1.0:
+            print(f"⚠️  SLOW REQUEST: {g.request_method} {g.request_path} "
+                  f"-> {response.status_code} ({elapsed:.3f}s)")
+        
+        # Add timing header for debugging
+        response.headers['X-Response-Time'] = f"{elapsed:.6f}s"
+    
+    return response
+
 basedir = os.path.abspath(os.path.dirname(__file__))
 # Ensure instance directory exists for SQLite DB path
 instance_dir = os.path.join(basedir, "instance")
 os.makedirs(instance_dir, exist_ok=True)
 app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv(
-    'DATABASE_URL', 
+    'DATABASE_URL',
     f'sqlite:///{os.path.join(instance_dir, "attendance.db")}'
 )
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
@@ -163,7 +191,7 @@ def login():
             # Failed login attempt
             user.record_failed_login()
             remaining_attempts = 3 - user.failed_login_attempts
-            
+
             if user.account_locked:
                 flash(
                     'Account locked due to multiple failed login attempts. '
@@ -196,13 +224,18 @@ def logout():
 def dashboard():
     """Show faculty or student dashboard depending on role with real database data."""
     from models import Attendance
-    
+
     try:
         if current_user.is_faculty:
             # Faculty/Admin dashboard with real stats
             total_students = User.query.filter_by(role='student').count()
             total_attendance_records = Attendance.query.count()
-            
+
+            # TODO-PERFORMANCE: N+1 query issue - fetching attendance for each student in loop
+            # OPTIMIZATION: Use eager loading with joinedload() or use a single aggregated query:
+            #   db.session.query(Attendance.student_id, func.count(), func.sum(case(...)))
+            #     .group_by(Attendance.student_id).all()
+            # This would reduce from N+1 queries to 1 query
             # Calculate average attendance percentage
             all_students = User.query.filter_by(role='student').all()
             attendance_percentages = []
@@ -212,22 +245,29 @@ def dashboard():
                     present = sum(1 for r in records if r.is_present)
                     percentage = (present / len(records) * 100) if records else 0
                     attendance_percentages.append(percentage)
-            
+
             avg_attendance = sum(attendance_percentages) / len(attendance_percentages) if attendance_percentages else 0
-            
-            return render_template('faculty_dashboard.html', 
+
+            return render_template('faculty_dashboard.html',
                                  total_students=total_students,
                                  avg_attendance=round(avg_attendance, 2),
                                  total_records=total_attendance_records)
-        
+
         # Student dashboard with real stats
+        # TODO-PERFORMANCE: Cache this query result for 5-10 minutes using Flask-Caching
+        # Student attendance data doesn't change frequently, could use:
+        #   @cache.memoize(timeout=300)
+        # Or use Redis/Memcached for distributed caching
         records = Attendance.query.filter_by(student_id=current_user.id).all()
-        
+
         total_classes = len(records)
         present_count = sum(1 for r in records if r.is_present) if records else 0
         absence_count = total_classes - present_count
         percentage = (present_count / total_classes * 100) if total_classes > 0 else 0
-        
+
+        # TODO-PERFORMANCE: Inefficient loop - could be replaced with SQL GROUP BY
+        # Use: db.session.query(Attendance.course_id, func.count(), func.sum(...))
+        #      .filter_by(student_id=current_user.id).group_by(Attendance.course_id)
         # Group attendance by course
         course_attendance = {}
         for record in records:
@@ -237,7 +277,7 @@ def dashboard():
             course_attendance[course]['total'] += 1
             if record.is_present:
                 course_attendance[course]['present'] += 1
-        
+
         # Calculate attendance percentage for each course and determine status
         course_summary = []
         for course, data in course_attendance.items():
@@ -248,10 +288,10 @@ def dashboard():
                 'percentage': round(course_pct, 2),
                 'status': status
             })
-        
+
         # Sort by course name
         course_summary.sort(key=lambda x: x['course'])
-        
+
         # Calculate bunk recommendations (SAS-96)
         bunk_recommendations = None
         try:
@@ -265,7 +305,7 @@ def dashboard():
         except Exception as e:
             # Bunk allowance feature not available
             pass
-        
+
         return render_template('student_dashboard.html',
                              total_classes=total_classes,
                              present_count=present_count,
@@ -294,7 +334,7 @@ def dashboard():
 def change_password():
     """Allow users to change their password with strong password validation."""
     from password_security import validate_password_strength, PasswordStrengthError
-    
+
     if request.method == 'POST':
         current_password = request.form.get('current_password')
         new_password = request.form.get('new_password')
@@ -385,7 +425,7 @@ def validate_password_api():
     Returns JSON with validation result and detailed requirements.
     """
     from password_security import validate_password_strength
-    
+
     data = request.get_json()
     password = data.get('password', '')
 
@@ -396,7 +436,7 @@ def validate_password_api():
         }), 400
 
     is_valid, error_msg = validate_password_strength(password)
-    
+
     # Calculate password strength score
     strength_score = 0
     checks = {
@@ -406,7 +446,7 @@ def validate_password_api():
         'digit': bool(re.search(r'[0-9]', password)),
         'special': bool(re.search(r'[!@#$%^&*(),.?":{}|<>_\-+=\[\]\\\/;~`]', password))
     }
-    
+
     strength_score = sum(checks.values())
     strength_level = 'weak'
     if strength_score == 5:
@@ -669,6 +709,57 @@ def api_login():
         'message': 'Username or password is incorrect'
     }), 401
 
+# SAS-INSTRUMENTATION: Health check endpoint
+@app.route('/api/health', methods=['GET'])
+def health_check():
+    """Health check endpoint to verify app and database connectivity.
+    
+    Returns:
+        JSON response with health status, database connectivity, and uptime info
+    """
+    health_status = {
+        'status': 'healthy',
+        'timestamp': datetime.utcnow().isoformat(),
+        'service': 'PESU Attendance System',
+        'version': '1.0.0'
+    }
+    
+    # Check database connectivity
+    try:
+        # Simple query to verify DB is accessible
+        db.session.execute(db.text('SELECT 1'))
+        health_status['database'] = {
+            'status': 'connected',
+            'type': 'SQLAlchemy',
+            'dialect': db.engine.dialect.name
+        }
+    except Exception as e:
+        health_status['status'] = 'degraded'
+        health_status['database'] = {
+            'status': 'error',
+            'message': str(e)
+        }
+        return jsonify(health_status), 503
+    
+    # Add user count statistics
+    try:
+        total_users = User.query.count()
+        student_count = User.query.filter_by(role='student').count()
+        teacher_count = User.query.filter_by(role='teacher').count()
+        admin_count = User.query.filter_by(role='admin').count()
+        
+        health_status['statistics'] = {
+            'total_users': total_users,
+            'students': student_count,
+            'teachers': teacher_count,
+            'admins': admin_count
+        }
+    except Exception:
+        # Statistics are optional - don't fail health check if unavailable
+        pass
+    
+    return jsonify(health_status), 200
+
 # SAS-88: Register attendance routes with RBAC
 app.register_blueprint(attendance_bp)
 
@@ -705,6 +796,7 @@ with app.app_context():
                 reset_pw = bool(os.getenv('RESET_DEMO_PASSWORDS'))
 
                 def ensure_user(username, name, is_faculty, role, password):
+                    """Create or update a demo user account."""
                     user = db.session.execute(
                         db.select(User).filter_by(username=username)
                     ).scalar_one_or_none()

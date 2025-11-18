@@ -60,29 +60,29 @@ def validate_password_strength(password: str) -> Tuple[bool, Optional[str]]:
     """
     if not password:
         return False, "Password cannot be empty"
-    
+
     if len(password) < MIN_PASSWORD_LENGTH:
         return False, f"Password must be at least {MIN_PASSWORD_LENGTH} characters long"
-    
+
     if len(password) > MAX_PASSWORD_LENGTH:
         return False, f"Password must not exceed {MAX_PASSWORD_LENGTH} characters"
-    
+
     # Check for uppercase
     if not re.search(r'[A-Z]', password):
         return False, "Password must contain at least one uppercase letter"
-    
+
     # Check for lowercase
     if not re.search(r'[a-z]', password):
         return False, "Password must contain at least one lowercase letter"
-    
+
     # Check for digit
     if not re.search(r'[0-9]', password):
         return False, "Password must contain at least one digit"
-    
+
     # Check for special character
     if not re.search(r'[!@#$%^&*(),.?":{}|<>_\-+=\[\]\\\/;~`]', password):
         return False, "Password must contain at least one special character"
-    
+
     return True, None
 
 
@@ -111,16 +111,16 @@ def hash_password(password: str, validate_strength: bool = False) -> str:
         is_valid, error_msg = validate_password_strength(password)
         if not is_valid:
             raise PasswordStrengthError(error_msg)
-    
+
     if BCRYPT_AVAILABLE:
         # Use bcrypt for strong password hashing
         password_bytes = password.encode('utf-8')
-        
+
         # Bcrypt has a 72-byte limit, truncate if necessary
         # This is safe because we're still hashing a long, random-looking string
         if len(password_bytes) > 72:
             password_bytes = password_bytes[:72]
-        
+
         salt = bcrypt.gensalt(rounds=BCRYPT_ROUNDS)
         hashed = bcrypt.hashpw(password_bytes, salt)
         return hashed.decode('utf-8')
@@ -151,16 +151,16 @@ def verify_password(password: str, password_hash: str) -> bool:
     """
     if not password or not password_hash:
         return False
-    
+
     try:
         # Try bcrypt first
         if BCRYPT_AVAILABLE and password_hash.startswith(('$2a$', '$2b$', '$2y$')):
             password_bytes = password.encode('utf-8')
-            
+
             # Bcrypt has a 72-byte limit, truncate to match hashing behavior
             if len(password_bytes) > 72:
                 password_bytes = password_bytes[:72]
-            
+
             hash_bytes = password_hash.encode('utf-8')
             return bcrypt.checkpw(password_bytes, hash_bytes)
         else:
@@ -186,12 +186,12 @@ def needs_rehash(password_hash: str) -> bool:
     """
     if not password_hash:
         return True
-    
+
     # If bcrypt is available but hash is not bcrypt format, needs rehash
     if BCRYPT_AVAILABLE:
         if not password_hash.startswith(('$2a$', '$2b$', '$2y$')):
             return True
-        
+
         # Check if bcrypt rounds are less than configured
         try:
             # Extract rounds from bcrypt hash (format: $2b$12$...)
@@ -201,7 +201,7 @@ def needs_rehash(password_hash: str) -> bool:
                 return current_rounds < BCRYPT_ROUNDS
         except (ValueError, IndexError):
             return True
-    
+
     return False
 
 
@@ -228,11 +228,11 @@ def upgrade_password_hash(password: str, old_hash: str) -> Optional[str]:
     # Verify password is correct
     if not verify_password(password, old_hash):
         return None
-    
+
     # Check if upgrade needed
     if not needs_rehash(old_hash):
         return None
-    
+
     # Generate new hash
     return hash_password(password, validate_strength=False)
 

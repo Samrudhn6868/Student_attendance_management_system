@@ -97,15 +97,56 @@ Follow conventional commit format:
 - [User Guide](docs/user-guide.md)
 - [Developer Guide](docs/developer-guide.md)
 
-## 🧪 Testing
+## 🧪 Testing and Quality
 
+This project now includes comprehensive testing and quality assurance infrastructure:
+
+- **Test Coverage**: Target ≥80% code coverage
+- **Code Quality**: Pylint score target ≥9.0/10
+- **Performance Testing**: Benchmarks for critical operations
+- **Load Testing**: Support for 100+ concurrent users
+
+### Quick Start - Quality Checks
 ```bash
-# Run tests
-npm test
+# Run complete quality check suite
+python tools/run_quality_checks.py
 
 # Run tests with coverage
-npm run test:coverage
+pytest tests/ --cov=src --cov-report=term-missing
+
+# Run pylint
+pylint src/
+
+# Run performance benchmarks
+pytest tests/test_performance.py --benchmark-only
+
+# Load testing
+locust -f perf/load_test.py --host=http://localhost:5000
 ```
+
+### Documentation
+- **[TESTING.md](TESTING.md)** - Comprehensive testing guide (500+ lines)
+- **[QUALITY_INFRASTRUCTURE_SUMMARY.md](QUALITY_INFRASTRUCTURE_SUMMARY.md)** - Implementation summary and quick reference
+
+### Test Structure
+```
+tests/
+├── unit/               # Unit tests for individual modules
+├── integration/        # Integration tests for component interaction
+├── system/            # End-to-end system tests
+└── test_performance.py # Performance benchmarks
+
+perf/
+└── load_test.py       # Locust load testing
+
+tools/
+├── run_quality_checks.py  # Automated quality suite
+├── improve_pylint.py      # Pylint analysis
+└── profiling.py           # Performance profiling
+```
+
+For detailed testing instructions, see [TESTING.md](TESTING.md).
+
 
 ## 📄 License
 

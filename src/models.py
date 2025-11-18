@@ -109,7 +109,7 @@ class User(UserMixin, db.Model):
     def get_id(self):
         """Override UserMixin get_id to use id."""
         return str(self.id)
-    
+
     def set_password(self, password):
         """Hash and set the user's password using bcrypt (SAS-86).
         
@@ -117,7 +117,7 @@ class User(UserMixin, db.Model):
             password (str): Plaintext password to hash
         """
         self.password_hash = hash_password(password)
-    
+
     def check_password(self, password):
         """Verify if the given plaintext password matches the stored hash (SAS-86).
         
@@ -166,7 +166,7 @@ class User(UserMixin, db.Model):
         """
         if not self.account_locked:
             return False
-        
+
         # Auto-unlock after 30 minutes
         if self.locked_at:
             unlock_time = self.locked_at + timedelta(minutes=30)
@@ -177,7 +177,7 @@ class User(UserMixin, db.Model):
             # If locked_at is None but account is marked as locked, unlock it
             self.unlock_account()
             return False
-        
+
         return True
 
     def lock_account(self):
@@ -304,10 +304,12 @@ class Attendance(db.Model):
 
     @student_srn.comparator
     def student_srn(cls):
+        """Return hash comparator for encrypted student SRN."""
         return cls._HashComparator(cls.student_srn_hash)
 
     @hybrid_property
     def course_id(self):
+        """Decrypt and return course ID."""
         if self._course_id:
             try:
                 return decrypt_data(self._course_id)
@@ -317,6 +319,7 @@ class Attendance(db.Model):
 
     @course_id.setter
     def course_id(self, value):
+        """Encrypt and set course ID."""
         if value is None:
             self._course_id = None
             self.course_id_hash = None
@@ -326,6 +329,7 @@ class Attendance(db.Model):
 
     @course_id.comparator
     def course_id(cls):
+        """Return hash comparator for encrypted course ID."""
         return cls._HashComparator(cls.course_id_hash)
 
     @hybrid_property
@@ -348,10 +352,12 @@ class Attendance(db.Model):
 
     @status.comparator
     def status(cls):
+        """Return hash comparator for encrypted attendance status."""
         return cls._HashComparator(cls.status_hash)
 
     @hybrid_property
     def marked_by(self):
+        """Decrypt and return the name of faculty who marked attendance."""
         if self._marked_by:
             try:
                 return decrypt_data(self._marked_by)
@@ -361,6 +367,7 @@ class Attendance(db.Model):
 
     @marked_by.setter
     def marked_by(self, value):
+        """Encrypt and set the name of faculty who marked attendance."""
         if value is None:
             self._marked_by = None
         else:
@@ -389,33 +396,33 @@ class AttendanceCorrectionRequest(db.Model):
         admin_notes (str): Notes from reviewer (nullable)
     """
     id = db.Column(db.Integer, primary_key=True)
-    
+
     # Student information
     student_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     student_name = db.Column(db.String(100), nullable=False)
-    
+
     # Attendance details
     course_id = db.Column(db.String(100), nullable=False)
     date = db.Column(db.Date, nullable=False)
     current_status = db.Column(db.String(20), nullable=False)  # 'present' or 'absent'
     requested_status = db.Column(db.String(20), nullable=False)  # 'present' or 'absent'
-    
+
     # Request information
     reason = db.Column(db.Text, nullable=False)
     status = db.Column(db.String(20), default='pending', nullable=False)  # pending, approved, rejected, cancelled
-    
+
     # Timestamps
     submitted_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     reviewed_at = db.Column(db.DateTime, nullable=True)
-    
+
     # Reviewer information
     reviewed_by = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
     admin_notes = db.Column(db.Text, nullable=True)
-    
+
     # Relationship to student
     student = db.relationship('User', foreign_keys=[student_id], backref='correction_requests')
     reviewer = db.relationship('User', foreign_keys=[reviewed_by])
-    
+
     def __repr__(self):
         """String representation of correction request."""
         return (f"<AttendanceCorrectionRequest id={self.id} "

@@ -115,9 +115,10 @@ def app():
         
         yield test_app
         
-        # Cleanup
+        # Cleanup - properly close all connections
         test_db.session.remove()
         test_db.drop_all()
+        test_db.engine.dispose()  # Close all database connections
 
 
 @pytest.fixture
@@ -130,3 +131,77 @@ def client(app):
 def runner(app):
     """Create a test CLI runner for the Flask application."""
     return app.test_cli_runner()
+
+
+@pytest.fixture
+def auth_headers_student(app):
+    """Create authentication headers for a student user."""
+    return {'Authorization': 'Bearer test-student-token'}
+
+
+@pytest.fixture
+def auth_headers_teacher(app):
+    """Create authentication headers for a teacher user."""
+    return {'Authorization': 'Bearer test-teacher-token'}
+
+
+@pytest.fixture
+def auth_headers_admin(app):
+    """Create authentication headers for an admin user."""
+    return {'Authorization': 'Bearer test-admin-token'}
+
+
+@pytest.fixture
+def sample_student(app):
+    """Create a sample student."""
+    class Student:
+        id = 1
+        srn = 'PES1UG20CS001'
+        name = 'Test Student'
+        role = 'student'
+    return Student()
+
+
+@pytest.fixture
+def sample_teacher(app):
+    """Create a sample teacher."""
+    class Teacher:
+        id = 2
+        name = 'Test Teacher'
+        role = 'teacher'
+    return Teacher()
+
+
+@pytest.fixture
+def sample_course(app):
+    """Create a sample course."""
+    class Course:
+        id = 1
+        course_id = 'CS101'
+        course_name = 'Introduction to Programming'
+    return Course()
+
+
+@pytest.fixture
+def sample_attendance(app):
+    """Create a sample attendance record."""
+    class AttendanceRecord:
+        id = 1
+        student_id = 1
+        course_id = 1
+        date = datetime.now().date()
+        status = 'absent'
+    return AttendanceRecord()
+
+
+@pytest.fixture
+def sample_correction_request(app):
+    """Create a sample correction request."""
+    class CorrectionRequest:
+        id = 1
+        attendance_id = 1
+        student_id = 1
+        reason = 'I was present but marked absent'
+        requested_status = 'present'
+        status = 'pending'
+    return CorrectionRequest()

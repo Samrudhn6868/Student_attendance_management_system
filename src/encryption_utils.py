@@ -59,12 +59,12 @@ def _load_encryption_keys() -> Optional[MultiFernet]:
     """
     if _ENCRYPTION_DISABLED:
         return None
-    
+
     primary_key = os.getenv('ENCRYPTION_KEY')
     old_key = os.getenv('ENCRYPTION_KEY_OLD')  # For key rotation
-    
+
     fernet_instances = []
-    
+
     if not primary_key:
         # Generate temporary key for dev/test (not production)
         if os.getenv('FLASK_ENV') != 'production':
@@ -76,21 +76,21 @@ def _load_encryption_keys() -> Optional[MultiFernet]:
                 "ENCRYPTION_KEY must be set in production. "
                 "Generate one with: python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())'"
             )
-    
+
     try:
         # Primary key (current)
         key_bytes = primary_key.encode() if isinstance(primary_key, str) else primary_key
         fernet_instances.append(Fernet(key_bytes))
-        
+
         # Old key for rotation support
         if old_key:
             old_key_bytes = old_key.encode() if isinstance(old_key, str) else old_key
             fernet_instances.append(Fernet(old_key_bytes))
-        
+
         # MultiFernet tries each key in order for decryption
         # Always encrypts with the first (primary) key
         return MultiFernet(fernet_instances)
-        
+
     except Exception as e:
         raise RuntimeError(f"Invalid encryption key format: {e}")
 
@@ -105,6 +105,11 @@ def _require_fernet() -> Fernet:
     return _FERNET
 
 
+# TODO-PERFORMANCE: Consider caching frequently encrypted values (like course IDs)
+# Use LRU cache with @functools.lru_cache(maxsize=1024) for deterministic inputs
+# WARNING: Only cache if the same plaintext always needs same ciphertext (not recommended
+# for security, but course IDs are re-encrypted often and don't change)
+# Example: @functools.lru_cache(maxsize=1024)
 def encrypt_data(plaintext: str) -> str:
     """Encrypt plaintext and return URL-safe base64 ciphertext string.
 
@@ -257,7 +262,7 @@ def generate_secure_token(length: int = 32) -> str:
     return secrets.token_urlsafe(length)
 
 
-def generate_api_token(user_id: int, username: str, role: str, 
+def generate_api_token(user_id: int, username: str, role: str,
                        expires_in_hours: int = 24) -> str:
     """Generate an encrypted API token with expiration.
     
@@ -294,12 +299,12 @@ def verify_api_token(token: str) -> Optional[Dict[str, Any]]:
         payload = decrypt_json(token)
         if not payload:
             return None
-        
+
         # Check expiration
         expires_at = datetime.fromisoformat(payload['expires_at'])
         if datetime.utcnow() > expires_at:
             return None  # Token expired
-        
+
         return payload
     except (InvalidToken, KeyError, ValueError):
         return None
@@ -347,7 +352,7 @@ def sanitize_dict(data: Dict[str, Any], sensitive_keys: List[str] = None) -> Dic
     """
     if sensitive_keys is None:
         sensitive_keys = ['password', 'token', 'api_key', 'secret', 'private_key']
-    
+
     sanitized = {}
     for key, value in data.items():
         if any(sensitive_key in key.lower() for sensitive_key in sensitive_keys):
@@ -393,7 +398,7 @@ def needs_reencryption(ciphertext: str) -> bool:
     """
     if not _FERNET or not isinstance(_FERNET, MultiFernet):
         return False
-    
+
     try:
         # Try decrypting with primary key only
         primary_fernet = _FERNET._fernets[0]
@@ -451,9 +456,9 @@ def get_encryption_info() -> Dict[str, Any]:
         'key_rotation_supported': False,
         'algorithm': 'Fernet (AES-128-CBC + HMAC-SHA256)',
     }
-    
+
     if _FERNET and isinstance(_FERNET, MultiFernet):
         info['key_rotation_supported'] = True
         info['num_keys'] = len(_FERNET._fernets)
-    
+
     return info

@@ -29,12 +29,12 @@ def admin_required(func):
         # Check if user is authenticated
         if not current_user.is_authenticated:
             return jsonify({'error': 'Authentication required'}), 401
-        
+
         # Check if user has admin role
         user_role = getattr(current_user, 'role', None)
         if user_role != 'admin':
             return jsonify({'error': 'Admin access required'}), 403
-        
+
         return func(*args, **kwargs)
     return wrapper
 
@@ -67,15 +67,15 @@ def get_logs():
         action_type = request.args.get('action_type')
         limit = request.args.get('limit', 100, type=int)
         offset = request.args.get('offset', 0, type=int)
-        
+
         # Convert date strings to datetime objects
         start_dt = datetime.fromisoformat(start_date) if start_date else None
         end_dt = datetime.fromisoformat(end_date) if end_date else None
-        
+
         # Validate limit
         if limit > 1000:
             limit = 1000
-        
+
         # Get audit logs
         logs, total_count = get_audit_logs(
             start_date=start_dt,
@@ -87,7 +87,7 @@ def get_logs():
             limit=limit,
             offset=offset
         )
-        
+
         return jsonify({
             'success': True,
             'total_count': total_count,
@@ -95,7 +95,7 @@ def get_logs():
             'offset': offset,
             'logs': [log.to_dict() for log in logs]
         }), 200
-        
+
     except ValueError as e:
         return jsonify({'error': f'Invalid date format: {str(e)}'}), 400
     except Exception as e:
@@ -115,15 +115,15 @@ def get_log_detail(log_id):
     """
     try:
         log = db.session.get(AuditLog, log_id)
-        
+
         if not log:
             return jsonify({'error': 'Audit log entry not found'}), 404
-        
+
         return jsonify({
             'success': True,
             'log': log.to_dict()
         }), 200
-        
+
     except Exception as e:
         return jsonify({'error': f'Failed to retrieve audit log: {str(e)}'}), 500
 
@@ -152,11 +152,11 @@ def get_report():
         student_srn = request.args.get('student_srn')
         course_id = request.args.get('course_id')
         report_format = request.args.get('format', 'json')
-        
+
         # Convert date strings to datetime objects
         start_dt = datetime.fromisoformat(start_date) if start_date else None
         end_dt = datetime.fromisoformat(end_date) if end_date else None
-        
+
         # Generate report
         report = generate_audit_report(
             start_date=start_dt,
@@ -166,7 +166,7 @@ def get_report():
             course_id=course_id,
             format=report_format
         )
-        
+
         if report_format == 'csv':
             from flask import Response
             return Response(
@@ -181,7 +181,7 @@ def get_report():
                 'success': True,
                 'report': report
             }), 200
-        
+
     except ValueError as e:
         return jsonify({'error': f'Invalid format: {str(e)}'}), 400
     except Exception as e:
@@ -203,22 +203,22 @@ def get_statistics():
     try:
         start_date = request.args.get('start_date')
         end_date = request.args.get('end_date')
-        
+
         start_dt = datetime.fromisoformat(start_date) if start_date else None
         end_dt = datetime.fromisoformat(end_date) if end_date else None
-        
+
         # Get summary report
         stats = generate_audit_report(
             start_date=start_dt,
             end_date=end_dt,
             format='summary'
         )
-        
+
         return jsonify({
             'success': True,
             'statistics': stats
         }), 200
-        
+
     except ValueError as e:
         return jsonify({'error': f'Invalid date format: {str(e)}'}), 400
     except Exception as e:
@@ -235,7 +235,7 @@ def get_users_with_activity():
     """
     try:
         from sqlalchemy import func
-        
+
         # Query for users with audit log counts
         users = db.session.query(
             AuditLog.user_id,
@@ -249,7 +249,7 @@ def get_users_with_activity():
         ).order_by(
             func.count(AuditLog.id).desc()
         ).all()
-        
+
         user_list = [
             {
                 'user_id': user[0],
@@ -259,13 +259,13 @@ def get_users_with_activity():
             }
             for user in users
         ]
-        
+
         return jsonify({
             'success': True,
             'users': user_list,
             'total_users': len(user_list)
         }), 200
-        
+
     except Exception as e:
         return jsonify({'error': f'Failed to get user list: {str(e)}'}), 500
 
@@ -286,15 +286,15 @@ def get_timeline():
     try:
         from sqlalchemy import func
         from datetime import timedelta
-        
+
         days = request.args.get('days', 7, type=int)
         student_srn = request.args.get('student_srn')
         course_id = request.args.get('course_id')
-        
+
         # Calculate start date
         end_date = datetime.utcnow()
         start_date = end_date - timedelta(days=days)
-        
+
         # Build query
         query = db.session.query(
             func.date(AuditLog.timestamp).label('date'),
@@ -304,42 +304,42 @@ def get_timeline():
             AuditLog.timestamp >= start_date,
             AuditLog.timestamp <= end_date
         )
-        
+
         if student_srn:
             query = query.filter(AuditLog.student_srn == student_srn)
-        
+
         if course_id:
             query = query.filter(AuditLog.course_id == course_id)
-        
+
         results = query.group_by(
             func.date(AuditLog.timestamp),
             AuditLog.action_type
         ).order_by(
             func.date(AuditLog.timestamp).desc()
         ).all()
-        
+
         # Organize data by date
         timeline = {}
         for row in results:
             date_str = str(row[0])
             action_type = row[1]
             count = row[2]
-            
+
             if date_str not in timeline:
                 timeline[date_str] = {
                     'CREATE': 0,
                     'UPDATE': 0,
                     'DELETE': 0
                 }
-            
+
             timeline[date_str][action_type] = count
-        
+
         return jsonify({
             'success': True,
             'start_date': start_date.isoformat(),
             'end_date': end_date.isoformat(),
             'timeline': timeline
         }), 200
-        
+
     except Exception as e:
         return jsonify({'error': f'Failed to get timeline: {str(e)}'}), 500

@@ -3,6 +3,10 @@ Flask-SQLAlchemy
 Flask-Login
 Flask-WTF
 pytest
+pytest-cov
+pytest-benchmark
+pytest-xdist
+hypothesis
 coverage
 pylint
 bandit
@@ -12,3 +16,7 @@ PyJWT
 cryptography
 bcrypt>=5.0.0
 requests
+locust
+faker
+pytest-flask
+pytest-mock
