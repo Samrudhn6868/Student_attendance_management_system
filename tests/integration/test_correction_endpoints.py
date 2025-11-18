@@ -76,7 +76,7 @@ with app.app_context():
                     date_obj = date_str
                 
                 print(f"✓ Found attendance record:")
-                print(f"  Date: {date_obj}")
+                print(f"  Date (type={type(date_obj)}): {date_obj}")
                 print(f"  Current Status: {status}")
                 print(f"  Requested Status: {requested_status}")
                 
