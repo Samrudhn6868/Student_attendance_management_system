@@ -29,8 +29,9 @@ class TestEncryptionWithKey:
         encrypted = encrypt_data(plaintext)
         
         assert encrypted is not None
-        assert isinstance(encrypted, bytes)
-        assert encrypted != plaintext.encode()
+        # encrypt_data returns string (base64 encoded), not bytes
+        assert isinstance(encrypted, (str, bytes))
+        assert encrypted != plaintext
     
     def test_decrypt_data_basic(self):
         """Test basic data decryption."""

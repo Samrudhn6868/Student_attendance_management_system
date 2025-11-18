@@ -133,4 +133,4 @@ valid-metaclass-classmethod-first-arg=mcs
 
 [EXCEPTIONS]
 # Exceptions that will emit a warning when being caught
-overgeneral-exceptions=Exception
+overgeneral-exceptions=builtins.Exception

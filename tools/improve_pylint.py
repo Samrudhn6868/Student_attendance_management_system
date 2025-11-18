@@ -5,6 +5,7 @@ import json
 import os
 import sys
 from pathlib import Path
+from datetime import datetime
 
 
 class PylintImprover:
@@ -165,7 +166,7 @@ class PylintImprover:
         
         report = []
         report.append("# Pylint Improvement Report\n")
-        report.append(f"Generated: {os.popen('date').read().strip()}\n\n")
+        report.append(f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n")
         
         # Extract score
         score_line = [line for line in full_output.split('\n') if 'Your code has been rated' in line]
