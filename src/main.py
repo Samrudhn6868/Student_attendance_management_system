@@ -1,0 +1,843 @@
+"""Small Flask application for student/faculty attendance demo.
+
+Provides a User model, simple login flow and dashboards for faculty and
+students. Designed for local development and testing.
+"""
+
+import os
+import sys
+import re
+from datetime import datetime, timedelta
+
+from dotenv import load_dotenv
+from flask import (
+    Flask,
+    render_template,
+    request,
+    redirect,
+    url_for,
+    flash,
+    jsonify,
+)
+from flask_sqlalchemy import SQLAlchemy
+from flask_login import (
+    LoginManager,
+    UserMixin,
+    login_user,
+    login_required,
+    logout_user,
+    current_user,
+)
+
+# SAS-86: Import password security module for bcrypt support
+# Ensure local package imports work whether run as `python src/main.py` or `import src.main`
+CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
+if CURRENT_DIR not in sys.path:
+    sys.path.insert(0, CURRENT_DIR)
+
+from password_security import hash_password, verify_password
+
+# SAS-88: Import RBAC components
+from attendance_routes import attendance_bp
+from auth_middleware import create_token_response
+from rbac import require_role
+
+# SAS-93: Import attendance API
+from attendance_api import attendance_api_bp
+
+# SAS-94: Import audit trail API
+from audit_api import audit_api
+
+# Import correction request API
+from correction_request_api import correction_bp
+
+# SAS-99: Import teacher review API
+from teacher_review_api import teacher_review_bp
+
+# Import admin override API
+from admin_override_api import admin_override_bp
+
+# Import models for database operations
+from models import db, User
+
+# Load environment variables
+load_dotenv()
+app = Flask(__name__)
+app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'your-secret-key-here')
+app.config['SITE_NAME'] = os.getenv('SITE_NAME', 'PESU Attendance')
+
+# SAS-INSTRUMENTATION: Enable request timing and logging
+import time
+from flask import g
+
+@app.before_request
+def before_request():
+    """Record request start time for performance monitoring."""
+    g.start_time = time.perf_counter()
+    g.request_path = request.path
+    g.request_method = request.method
+
+@app.after_request
+def after_request(response):
+    """Log request performance metrics."""
+    if hasattr(g, 'start_time'):
+        elapsed = time.perf_counter() - g.start_time
+        
+        # Log slow requests (>1 second)
+        if elapsed > 1.0:
+            print(f"⚠️  SLOW REQUEST: {g.request_method} {g.request_path} "
+                  f"-> {response.status_code} ({elapsed:.3f}s)")
+        
+        # Add timing header for debugging
+        response.headers['X-Response-Time'] = f"{elapsed:.6f}s"
+    
+    return response
+
+basedir = os.path.abspath(os.path.dirname(__file__))
+# Ensure instance directory exists for SQLite DB path
+instance_dir = os.path.join(basedir, "instance")
+os.makedirs(instance_dir, exist_ok=True)
+app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv(
+    'DATABASE_URL',
+    f'sqlite:///{os.path.join(instance_dir, "attendance.db")}'
+)
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
+# Initialize extensions with the app
+db.init_app(app)
+login_manager = LoginManager()
+login_manager.init_app(app)
+login_manager.login_view = 'login'
+
+@app.context_processor
+def inject_site_name():
+    """Expose site_name into all templates for consistent branding and titles."""
+    return {"site_name": app.config.get('SITE_NAME', 'PESU Attendance')}
+
+
+class LeaveRequest(db.Model):
+    """Leave request submitted by a student.
+
+    Fields:
+        id: Primary key
+        user_id: Foreign key to User.id
+        start_date: First day of leave (inclusive)
+        end_date: Last day of leave (inclusive)
+        reason: Free-text reason entered by student
+        status: 'pending' | 'approved' | 'rejected'
+        created_at: Submission timestamp
+    """
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, nullable=False, index=True)
+    start_date = db.Column(db.Date, nullable=False)
+    end_date = db.Column(db.Date, nullable=False)
+    reason = db.Column(db.String(500), nullable=False)
+    status = db.Column(db.String(20), nullable=False, default='pending')
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+
+    def __repr__(self):
+        return f"<LeaveRequest id={self.id} user={self.user_id} {self.start_date}..{self.end_date} status={self.status}>"
+
+@login_manager.user_loader
+def load_user(user_id):
+    """Flask-Login user loader callback."""
+    return db.session.get(User, int(user_id))
+
+@app.route('/')
+def home():
+    """Redirect to the login page."""
+    return redirect(url_for('login'))
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    """Render login form and authenticate users on POST."""
+    if current_user.is_authenticated:
+        return redirect(url_for('dashboard'))
+
+    if request.method == 'POST':
+        username = request.form.get('username')  # SRN or Faculty ID
+        password = request.form.get('password')
+
+        user = db.session.execute(
+            db.select(User).filter_by(username=username)
+        ).scalar_one_or_none()
+
+        if user:
+            # Check if account is locked
+            if user.is_locked():
+                minutes_locked = 30
+                if user.locked_at:
+                    time_remaining = timedelta(minutes=minutes_locked) - (
+                        datetime.utcnow() - user.locked_at
+                    )
+                    minutes_left = int(time_remaining.total_seconds() / 60)
+                    flash(
+                        f'Account is locked due to multiple failed login attempts. '
+                        f'Please try again in {minutes_left} minutes.',
+                        'error'
+                    )
+                else:
+                    flash('Account is locked. Please contact administrator.', 'error')
+                return render_template('login.html')
+
+            # Verify password
+            if user.check_password(password):
+                # Successful login
+                user.reset_failed_attempts()
+                login_user(user)
+                flash('Logged in successfully!', 'success')
+                return redirect(url_for('dashboard'))
+
+            # Failed login attempt
+            user.record_failed_login()
+            remaining_attempts = 3 - user.failed_login_attempts
+
+            if user.account_locked:
+                flash(
+                    'Account locked due to multiple failed login attempts. '
+                    'Please try again after 30 minutes.',
+                    'error'
+                )
+            elif remaining_attempts > 0:
+                flash(
+                    f'Invalid password. {remaining_attempts} attempts remaining before account lock.',
+                    'error'
+                )
+            else:
+                flash('Invalid username or password', 'error')
+        else:
+            # User not found
+            flash('Invalid username or password', 'error')
+
+    return render_template('login.html')
+
+@app.route('/logout')
+@login_required
+def logout():
+    """Log out the current user and redirect to login."""
+    logout_user()
+    flash('Logged out successfully!', 'success')
+    return redirect(url_for('login'))
+
+@app.route('/dashboard')
+@login_required
+def dashboard():
+    """Show faculty or student dashboard depending on role with real database data."""
+    from models import Attendance
+
+    try:
+        if current_user.is_faculty:
+            # Faculty/Admin dashboard with real stats
+            total_students = User.query.filter_by(role='student').count()
+            total_attendance_records = Attendance.query.count()
+
+            # TODO-PERFORMANCE: N+1 query issue - fetching attendance for each student in loop
+            # OPTIMIZATION: Use eager loading with joinedload() or use a single aggregated query:
+            #   db.session.query(Attendance.student_id, func.count(), func.sum(case(...)))
+            #     .group_by(Attendance.student_id).all()
+            # This would reduce from N+1 queries to 1 query
+            # Calculate average attendance percentage
+            all_students = User.query.filter_by(role='student').all()
+            attendance_percentages = []
+            for student in all_students:
+                records = Attendance.query.filter_by(student_id=student.id).all()
+                if records:
+                    present = sum(1 for r in records if r.is_present)
+                    percentage = (present / len(records) * 100) if records else 0
+                    attendance_percentages.append(percentage)
+
+            avg_attendance = sum(attendance_percentages) / len(attendance_percentages) if attendance_percentages else 0
+
+            return render_template('faculty_dashboard.html',
+                                 total_students=total_students,
+                                 avg_attendance=round(avg_attendance, 2),
+                                 total_records=total_attendance_records)
+
+        # Student dashboard with real stats
+        # TODO-PERFORMANCE: Cache this query result for 5-10 minutes using Flask-Caching
+        # Student attendance data doesn't change frequently, could use:
+        #   @cache.memoize(timeout=300)
+        # Or use Redis/Memcached for distributed caching
+        records = Attendance.query.filter_by(student_id=current_user.id).all()
+
+        total_classes = len(records)
+        present_count = sum(1 for r in records if r.is_present) if records else 0
+        absence_count = total_classes - present_count
+        percentage = (present_count / total_classes * 100) if total_classes > 0 else 0
+
+        # TODO-PERFORMANCE: Inefficient loop - could be replaced with SQL GROUP BY
+        # Use: db.session.query(Attendance.course_id, func.count(), func.sum(...))
+        #      .filter_by(student_id=current_user.id).group_by(Attendance.course_id)
+        # Group attendance by course
+        course_attendance = {}
+        for record in records:
+            course = record.course_id or 'General'
+            if course not in course_attendance:
+                course_attendance[course] = {'total': 0, 'present': 0}
+            course_attendance[course]['total'] += 1
+            if record.is_present:
+                course_attendance[course]['present'] += 1
+
+        # Calculate attendance percentage for each course and determine status
+        course_summary = []
+        for course, data in course_attendance.items():
+            course_pct = (data['present'] / data['total'] * 100) if data['total'] > 0 else 0
+            status = 'Good' if course_pct >= 75 else 'Warning'
+            course_summary.append({
+                'course': course,
+                'percentage': round(course_pct, 2),
+                'status': status
+            })
+
+        # Sort by course name
+        course_summary.sort(key=lambda x: x['course'])
+
+        # Calculate bunk recommendations (SAS-96)
+        bunk_recommendations = None
+        try:
+            from bunk_recommendations import BunkRecommendationService
+            bunk_recommendations = BunkRecommendationService.calculate_safe_bunks(
+                classes_attended=present_count,
+                total_classes_held=total_classes,
+                total_classes_remaining=10,  # Estimate remaining classes
+                min_attendance=75.0
+            )
+        except Exception as e:
+            # Bunk allowance feature not available
+            pass
+
+        return render_template('student_dashboard.html',
+                             total_classes=total_classes,
+                             present_count=present_count,
+                             absence_count=absence_count,
+                             attendance_percentage=round(percentage, 2),
+                             course_summary=course_summary,
+                             bunk_recommendations=bunk_recommendations)
+    except Exception as e:
+        # If Attendance table doesn't exist or query fails, use zero values
+        if current_user.is_faculty:
+            return render_template('faculty_dashboard.html',
+                                 total_students=User.query.filter_by(role='student').count(),
+                                 avg_attendance=0,
+                                 total_records=0)
+        else:
+            return render_template('student_dashboard.html',
+                                 total_classes=0,
+                                 present_count=0,
+                                 absence_count=0,
+                                 attendance_percentage=0)
+
+
+# SAS-85: Password Change Endpoint with Strong Password Policy
+@app.route('/change-password', methods=['GET', 'POST'])
+@login_required
+def change_password():
+    """Allow users to change their password with strong password validation."""
+    from password_security import validate_password_strength, PasswordStrengthError
+
+    if request.method == 'POST':
+        current_password = request.form.get('current_password')
+        new_password = request.form.get('new_password')
+        confirm_password = request.form.get('confirm_password')
+
+        # Validation
+        if not current_password or not new_password or not confirm_password:
+            flash('All fields are required.', 'error')
+            return render_template('change_password.html')
+
+        # Verify current password
+        if not current_user.check_password(current_password):
+            flash('Current password is incorrect.', 'error')
+            return render_template('change_password.html')
+
+        # Check if new password matches confirmation
+        if new_password != confirm_password:
+            flash('New passwords do not match.', 'error')
+            return render_template('change_password.html')
+
+        # Check if new password is different from current
+        if current_password == new_password:
+            flash('New password must be different from current password.', 'error')
+            return render_template('change_password.html')
+
+        # Validate password strength (SAS-85)
+        is_valid, error_msg = validate_password_strength(new_password)
+        if not is_valid:
+            flash(f'Password does not meet requirements: {error_msg}', 'error')
+            return render_template('change_password.html')
+
+        # Update password
+        try:
+            current_user.set_password(new_password)
+            db.session.commit()
+            flash('Password changed successfully!', 'success')
+            return redirect(url_for('dashboard'))
+        except PasswordStrengthError as e:
+            flash(f'Password change failed: {str(e)}', 'error')
+        except Exception as e:
+            db.session.rollback()
+            flash('An error occurred while changing password.', 'error')
+
+    return render_template('change_password.html')
+
+
+@app.route('/correction-request')
+@login_required
+@require_role('student')
+def correction_request_page():
+    """Render the attendance correction request submission page.
+    
+    Allows students to view and submit correction requests for their attendance.
+    """
+    return render_template('correction_request.html')
+
+
+# SAS-99: Teacher review page for correction requests
+@app.route('/teacher/review-requests')
+@login_required
+@require_role('teacher', 'admin')
+def teacher_review_page():
+    """Render the teacher review page for correction requests.
+    
+    Allows teachers to review, approve, or deny student correction requests
+    within a 48-hour window.
+    """
+    return render_template('teacher_review.html')
+
+
+@app.route('/admin/override-attendance')
+@login_required
+@require_role('admin')
+def admin_override_page():
+    """Render the admin attendance override management page.
+    
+    Allows admins to directly override any student's attendance record
+    with reason tracking and audit trail.
+    """
+    return render_template('admin_override.html')
+
+
+# SAS-85: API Endpoint for Password Strength Validation
+@app.route('/api/validate-password', methods=['POST'])
+def validate_password_api():
+    """API endpoint to validate password strength in real-time.
+    
+    Returns JSON with validation result and detailed requirements.
+    """
+    from password_security import validate_password_strength
+
+    data = request.get_json()
+    password = data.get('password', '')
+
+    if not password:
+        return jsonify({
+            'valid': False,
+            'message': 'Password cannot be empty'
+        }), 400
+
+    is_valid, error_msg = validate_password_strength(password)
+
+    # Calculate password strength score
+    strength_score = 0
+    checks = {
+        'length': len(password) >= 8,
+        'uppercase': bool(re.search(r'[A-Z]', password)),
+        'lowercase': bool(re.search(r'[a-z]', password)),
+        'digit': bool(re.search(r'[0-9]', password)),
+        'special': bool(re.search(r'[!@#$%^&*(),.?":{}|<>_\-+=\[\]\\\/;~`]', password))
+    }
+
+    strength_score = sum(checks.values())
+    strength_level = 'weak'
+    if strength_score == 5:
+        strength_level = 'strong'
+    elif strength_score >= 3:
+        strength_level = 'medium'
+
+    return jsonify({
+        'valid': is_valid,
+        'message': error_msg if not is_valid else 'Password meets all requirements',
+        'strength': strength_level,
+        'score': strength_score,
+        'checks': checks,
+        'requirements': {
+            'min_length': 8,
+            'max_length': 128,
+            'requires_uppercase': True,
+            'requires_lowercase': True,
+            'requires_digit': True,
+            'requires_special': True
+        }
+    }), 200 if is_valid else 400
+
+
+@app.route('/leave/request', methods=['GET', 'POST'])
+@login_required
+def request_leave():
+    """Allow students to request leave via a simple form.
+
+    GET: Render leave request form and list of own requests.
+    POST: Validate and create a LeaveRequest, then redirect back with a flash.
+    """
+    # Only students should request leave (teachers/admins typically approve)
+    if current_user.is_faculty:
+        flash('Only students can request leave.', 'error')
+        return redirect(url_for('dashboard'))
+
+    # Handle submission
+    if request.method == 'POST':
+        start_str = request.form.get('start_date')
+        end_str = request.form.get('end_date')
+        reason = (request.form.get('reason') or '').strip()
+
+        # Basic validation
+        if not start_str or not end_str or not reason:
+            flash('All fields are required.', 'error')
+            return redirect(url_for('request_leave'))
+
+        try:
+            start_date = datetime.strptime(start_str, '%Y-%m-%d').date()
+            end_date = datetime.strptime(end_str, '%Y-%m-%d').date()
+        except ValueError:
+            flash('Invalid date format. Use YYYY-MM-DD.', 'error')
+            return redirect(url_for('request_leave'))
+
+        if end_date < start_date:
+            flash('End date cannot be before start date.', 'error')
+            return redirect(url_for('request_leave'))
+
+        # Persist
+        lr = LeaveRequest(
+            user_id=current_user.id,
+            start_date=start_date,
+            end_date=end_date,
+            reason=reason,
+            status='pending',
+        )
+        db.session.add(lr)
+        db.session.commit()
+
+        flash('Leave request submitted for approval.', 'success')
+        return redirect(url_for('request_leave'))
+
+    # GET: show form + user's recent requests
+    my_requests = (
+        db.session.query(LeaveRequest)
+        .filter(LeaveRequest.user_id == current_user.id)
+        .order_by(LeaveRequest.created_at.desc())
+        .limit(20)
+        .all()
+    )
+
+    return render_template('request_leave.html', my_requests=my_requests)
+
+# ============================================================================
+# SAS-88: RBAC Test Page
+# ============================================================================
+
+@app.route('/test-rbac')
+@login_required
+def test_rbac():
+    """Simple HTML page to test RBAC functionality."""
+    user_role = getattr(
+        current_user,
+        'role',
+        'student' if not current_user.is_faculty else 'teacher'
+    )
+
+    html = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>SAS-88 RBAC Test Page</title>
+        <style>
+            body {{
+                font-family: Arial, sans-serif;
+                max-width: 800px;
+                margin: 50px auto;
+                padding: 20px;
+                background-color: #f5f5f5;
+            }}
+            .container {{
+                background-color: white;
+                padding: 30px;
+                border-radius: 10px;
+                box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            }}
+            h1 {{
+                color: #333;
+                border-bottom: 3px solid #007bff;
+                padding-bottom: 10px;
+            }}
+            .user-info {{
+                background-color: #e3f2fd;
+                padding: 15px;
+                border-radius: 5px;
+                margin: 20px 0;
+            }}
+            .role-badge {{
+                display: inline-block;
+                padding: 5px 15px;
+                border-radius: 20px;
+                font-weight: bold;
+                margin-left: 10px;
+            }}
+            .role-student {{ background-color: #90caf9; color: white; }}
+            .role-teacher {{ background-color: #81c784; color: white; }}
+            .role-admin {{ background-color: #e57373; color: white; }}
+            .test-links {{
+                margin: 30px 0;
+            }}
+            .test-link {{
+                display: block;
+                padding: 15px;
+                margin: 10px 0;
+                border-radius: 5px;
+                text-decoration: none;
+                color: white;
+                font-weight: bold;
+                text-align: center;
+                transition: transform 0.2s;
+            }}
+            .test-link:hover {{
+                transform: scale(1.02);
+            }}
+            .link-allowed {{ background-color: #4caf50; }}
+            .link-denied {{ background-color: #f44336; }}
+            .link-maybe {{ background-color: #ff9800; }}
+            .info {{
+                background-color: #fff3cd;
+                padding: 15px;
+                border-left: 4px solid #ffc107;
+                margin: 20px 0;
+            }}
+            .logout {{
+                display: inline-block;
+                padding: 10px 20px;
+                background-color: #6c757d;
+                color: white;
+                text-decoration: none;
+                border-radius: 5px;
+                margin-top: 20px;
+            }}
+            .logout:hover {{
+                background-color: #5a6268;
+            }}
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h1>🔐 SAS-88 RBAC Test Page</h1>
+
+            <div class="user-info">
+                <strong>👤 Logged in as:</strong> {current_user.name} ({current_user.username})
+                <span class="role-badge role-{user_role}">{user_role.upper()}</span>
+            </div>
+
+            <div class="info">
+                <strong>ℹ️ Instructions:</strong> Click the links below to test role-based access control.
+                You should see JSON responses or 403 Forbidden errors based on your role.
+            </div>
+
+            <div class="test-links">
+                <h3>📋 Test Attendance Endpoints:</h3>
+
+                <a href="/attendance/view" class="test-link link-allowed">
+                    ✅ View Attendance (All roles can access)
+                </a>
+
+                <a href="/attendance/mark" class="test-link {'link-maybe' if user_role in ['teacher', 'admin'] else 'link-denied'}">
+                    {'✅' if user_role in ['teacher', 'admin'] else '❌'} Mark Attendance
+                    (Teacher & Admin only)
+                </a>
+
+                <a href="/attendance/override" class="test-link {'link-allowed' if user_role == 'admin' else 'link-denied'}">
+                    {'✅' if user_role == 'admin' else '❌'} Override Attendance
+                    (Admin only)
+                </a>
+            </div>
+
+            <div class="info">
+                <strong>Expected Results:</strong><br>
+                • <strong>Student</strong>: Can only access "View Attendance"<br>
+                • <strong>Teacher</strong>: Can access "View" and "Mark"<br>
+                • <strong>Admin</strong>: Can access all three endpoints<br>
+                • Unauthorized access returns 403 Forbidden error
+            </div>
+
+            <a href="/logout" class="logout">← Logout</a>
+            <a href="/dashboard" class="logout" style="background-color: #007bff;">Dashboard</a>
+        </div>
+    </body>
+    </html>
+    """
+    return html
+
+# ============================================================================
+# SAS-88: JWT API Endpoints
+# ============================================================================
+
+@app.route('/api/login', methods=['POST'])
+def api_login():
+    """API login endpoint that returns JWT token for API authentication."""
+    data = request.get_json()
+
+    if not data:
+        return jsonify({
+            'error': 'Invalid request',
+            'message': 'Request body must be JSON'
+        }), 400
+
+    username = data.get('username')
+    password = data.get('password')
+
+    if not username or not password:
+        return jsonify({
+            'error': 'Missing credentials',
+            'message': 'Both username and password are required'
+        }), 400
+
+    user = db.session.execute(
+        db.select(User).filter_by(username=username)
+    ).scalar_one_or_none()
+
+    if user and user.check_password(password):
+        return jsonify(create_token_response(user)), 200
+
+    return jsonify({
+        'error': 'Invalid credentials',
+        'message': 'Username or password is incorrect'
+    }), 401
+
+# SAS-INSTRUMENTATION: Health check endpoint
+@app.route('/api/health', methods=['GET'])
+def health_check():
+    """Health check endpoint to verify app and database connectivity.
+    
+    Returns:
+        JSON response with health status, database connectivity, and uptime info
+    """
+    health_status = {
+        'status': 'healthy',
+        'timestamp': datetime.utcnow().isoformat(),
+        'service': 'PESU Attendance System',
+        'version': '1.0.0'
+    }
+    
+    # Check database connectivity
+    try:
+        # Simple query to verify DB is accessible
+        db.session.execute(db.text('SELECT 1'))
+        health_status['database'] = {
+            'status': 'connected',
+            'type': 'SQLAlchemy',
+            'dialect': db.engine.dialect.name
+        }
+    except Exception as e:
+        health_status['status'] = 'degraded'
+        health_status['database'] = {
+            'status': 'error',
+            'message': str(e)
+        }
+        return jsonify(health_status), 503
+    
+    # Add user count statistics
+    try:
+        total_users = User.query.count()
+        student_count = User.query.filter_by(role='student').count()
+        teacher_count = User.query.filter_by(role='teacher').count()
+        admin_count = User.query.filter_by(role='admin').count()
+        
+        health_status['statistics'] = {
+            'total_users': total_users,
+            'students': student_count,
+            'teachers': teacher_count,
+            'admins': admin_count
+        }
+    except Exception:
+        # Statistics are optional - don't fail health check if unavailable
+        pass
+    
+    return jsonify(health_status), 200
+
+# SAS-88: Register attendance routes with RBAC
+app.register_blueprint(attendance_bp)
+
+# SAS-93: Register attendance API routes
+app.register_blueprint(attendance_api_bp)
+
+# SAS-94: Register audit trail API (admin-only)
+app.register_blueprint(audit_api)
+
+# Register correction request API (student submission)
+app.register_blueprint(correction_bp)
+
+# SAS-99: Register teacher review API (teacher approval/denial)
+app.register_blueprint(teacher_review_bp)
+
+# Register admin override API
+app.register_blueprint(admin_override_bp)
+
+# Create DB tables on import to support integration tests and local dev.
+# In production deployments, migrations should be used instead.
+with app.app_context():
+    db.create_all()
+
+    # Development convenience: auto-seed demo users if DB is empty.
+    # This runs only when not explicitly disabled and when there are no users yet.
+    # Credentials (for local dev only):
+    #  - student1 / student123
+    #  - teacher1 / teacher123
+    #  - admin1   / admin123
+    try:
+        if not os.getenv('DISABLE_DEMO_SEED'):
+            # Only seed in non-production environments
+            if os.getenv('FLASK_ENV', 'development') != 'production':
+                reset_pw = bool(os.getenv('RESET_DEMO_PASSWORDS'))
+
+                def ensure_user(username, name, is_faculty, role, password):
+                    """Create or update a demo user account."""
+                    user = db.session.execute(
+                        db.select(User).filter_by(username=username)
+                    ).scalar_one_or_none()
+                    if not user:
+                        user = User(
+                            username=username,
+                            name=name,
+                            is_faculty=is_faculty,
+                            role=role,
+                        )
+                        user.set_password(password)
+                        db.session.add(user)
+                        return True
+                    # Optionally refresh default passwords
+                    if reset_pw:
+                        user.set_password(password)
+                    # Keep role/name in sync for demo users
+                    user.name = name
+                    user.is_faculty = is_faculty
+                    user.role = role
+                    return False
+
+                created_any = False
+                created_any |= ensure_user('student1', 'John Doe', False, 'student', 'student123')
+                created_any |= ensure_user('teacher1', 'Prof. Smith', True, 'teacher', 'teacher123')
+                created_any |= ensure_user('admin1', 'Admin User', True, 'admin', 'admin123')
+                if created_any or reset_pw:
+                    db.session.commit()
+    except Exception as seed_err:  # pylint: disable=broad-except
+        # Non-fatal in dev; avoid breaking app start due to seeding issues.
+        # You can disable this block by setting DISABLE_DEMO_SEED=1 in the environment.
+        print(f"[seed] Skipped demo user seeding due to: {seed_err}")
+
+# SAS-96: Register Bunk Allowance Feature
+try:
+    from bunk_allowance_quick_setup import setup_bunk_allowance
+    setup_bunk_allowance(app, db)
+except ImportError as e:
+    print(f"[bunk_allowance] Feature not available: {e}")
+except Exception as e:
+    print(f"[bunk_allowance] Setup warning: {e}")
+
+if __name__ == '__main__':
+    app.run(debug=True)

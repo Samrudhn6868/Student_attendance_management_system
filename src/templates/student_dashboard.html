@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ site_name }} - Student Dashboard</title>
+    <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='16' fill='%230d6efd'/><text x='50' y='58' font-size='54' text-anchor='middle' fill='white'>P</text></svg>">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="app-gradient">
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+        <div class="container">
+            <a class="navbar-brand" href="#">{{ site_name }}</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav me-auto">
+                    <li class="nav-item">
+                        <a class="nav-link active" href="#">Dashboard</a>
+                    </li>
+                </ul>
+                <ul class="navbar-nav align-items-center">
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('change_password') }}" title="Change Password">
+                            <i class="bi bi-key me-1"></i>
+                            Change Password
+                        </a>
+                    </li>
+                    <li class="nav-item d-flex align-items-center">
+                        <div class="user-avatar me-2" data-user-name="{{ current_user.name }}"></div>
+                        <span class="nav-link">
+                            {{ current_user.name }}
+                        </span>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('logout') }}">
+                            <i class="bi bi-box-arrow-right me-1"></i>
+                            Logout
+                        </a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mt-4 mb-5">
+        <!-- Dashboard Hero Banner -->
+        <div class="dashboard-hero">
+            <div class="dashboard-hero-content">
+                <div class="d-flex align-items-center justify-content-between flex-wrap">
+                    <div>
+                        <h1 class="mb-2">
+                            <i class="bi bi-speedometer2 me-2"></i>
+                            Student Dashboard
+                        </h1>
+                        <p class="lead mb-0">
+                            Welcome back, <strong class="text-gradient">{{ current_user.name }}</strong>! 
+                            <span class="text-muted">(SRN: {{ current_user.username }})</span>
+                        </p>
+                    </div>
+                    <div class="d-none d-lg-block" style="opacity: 0.6;">
+                        <img src="{{ url_for('static', filename='img/dashboard-abstract.svg') }}" 
+                             alt="Dashboard" 
+                             style="width: 180px; height: auto;">
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="row mt-4 g-4">
+            <!-- Attendance Stats with modern design -->
+            <div class="col-lg-3 col-md-6">
+                <div class="stat-card stat-card-primary">
+                    <div class="stat-card-icon">
+                        <i class="bi bi-graph-up-arrow"></i>
+                    </div>
+                    <div class="stat-card-content">
+                        <h6 class="stat-label">Overall Attendance</h6>
+                        <p class="stat-value">{{ attendance_percentage }}<span class="percent">%</span></p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-lg-3 col-md-6">
+                <div class="stat-card stat-card-success">
+                    <div class="stat-card-icon">
+                        <i class="bi bi-calendar-check"></i>
+                    </div>
+                    <div class="stat-card-content">
+                        <h6 class="stat-label">Classes Attended</h6>
+                        <p class="stat-value">{{ present_count }}<span class="slash">/</span>{{ total_classes }}</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-lg-3 col-md-6">
+                <div class="stat-card stat-card-danger">
+                    <div class="stat-card-icon">
+                        <i class="bi bi-calendar-x"></i>
+                    </div>
+                    <div class="stat-card-content">
+                        <h6 class="stat-label">Classes Missed</h6>
+                        <p class="stat-value">{{ absence_count }}</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-lg-3 col-md-6">
+                <div class="stat-card stat-card-info">
+                    <div class="stat-card-icon">
+                        <i class="bi bi-book"></i>
+                    </div>
+                    <div class="stat-card-content">
+                        <h6 class="stat-label">Active Courses</h6>
+                        <p class="stat-value">{{ course_summary|length }}</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Divider -->
+        <div style="height: 2px; background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent); margin: 2rem 0;"></div>
+
+        <div class="row g-4">
+            <!-- Attendance Summary - Full Width -->
+            <div class="col-12">
+                <div class="card card-glass card-hover">
+                    <div class="card-body">
+                        <div class="d-flex align-items-center justify-content-between mb-4">
+                            <div>
+                                <h5 class="section-title mb-1">
+                                    <i class="bi bi-bar-chart-line"></i>
+                                    Course Attendance Breakdown
+                                </h5>
+                                <p class="text-muted mb-0">Your attendance status across all enrolled courses</p>
+                            </div>
+                            <a href="/attendance/view" class="btn btn-sm btn-outline-primary">
+                                <i class="bi bi-eye me-1"></i>View Details
+                            </a>
+                        </div>
+                        
+                        {% if course_summary %}
+                            <div class="row">
+                                {% for course in course_summary %}
+                                <div class="col-lg-6 mb-3">
+                                    <div class="course-card">
+                                        <div class="course-header">
+                                            <h6 class="course-name">{{ course.course }}</h6>
+                                            {% if course.percentage >= 75 %}
+                                                <span class="badge bg-success">{{ course.status }}</span>
+                                            {% elif course.percentage >= 65 %}
+                                                <span class="badge bg-warning">At Risk</span>
+                                            {% else %}
+                                                <span class="badge bg-danger">Critical</span>
+                                            {% endif %}
+                                        </div>
+                                        <div class="progress mt-2" style="height: 8px;">
+                                            {% if course.percentage >= 80 %}
+                                                <div class="progress-bar bg-success" role="progressbar" aria-valuenow="{{ course.percentage }}" aria-valuemin="0" aria-valuemax="100" data-percentage="{{ course.percentage }}"></div>
+                                            {% elif course.percentage >= 75 %}
+                                                <div class="progress-bar bg-info" role="progressbar" aria-valuenow="{{ course.percentage }}" aria-valuemin="0" aria-valuemax="100" data-percentage="{{ course.percentage }}"></div>
+                                            {% else %}
+                                                <div class="progress-bar bg-danger" role="progressbar" aria-valuenow="{{ course.percentage }}" aria-valuemin="0" aria-valuemax="100" data-percentage="{{ course.percentage }}"></div>
+                                            {% endif %}
+                                        </div>
+                                        <div class="d-flex justify-content-between mt-2">
+                                            <small class="text-muted">Attendance: <strong>{{ course.percentage }}%</strong></small>
+                                            <small class="text-muted">Min Required: <strong>75%</strong></small>
+                                        </div>
+                                    </div>
+                                </div>
+                                {% endfor %}
+                            </div>
+                        {% else %}
+                            <div class="alert alert-info alert-sm" role="alert">
+                                <i class="bi bi-info-circle me-2"></i>
+                                <strong>No attendance records yet.</strong> Your attendance will appear here once faculty marks your attendance.
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row g-4 mt-2">
+            <!-- Bunk Allowance & Recommendations -->
+            <div class="col-lg-6">
+                <div class="card card-glass card-hover">
+                    <div class="card-body">
+                        <h5 class="section-title mb-4">
+                            <i class="bi bi-calendar-event"></i>
+                            Bunk Allowance & Recommendations
+                        </h5>
+                        {% if bunk_recommendations %}
+                            <!-- Status Badge -->
+                            <div class="mb-4">
+                                {% if bunk_recommendations.status == 'safe' %}
+                                    <div class="alert alert-success alert-dismissible fade show" role="alert">
+                                        <i class="bi bi-check-circle-fill me-2"></i>
+                                        <strong>Safe Zone</strong> - You have adequate attendance buffer
+                                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                                    </div>
+                                {% elif bunk_recommendations.status == 'warning' %}
+                                    <div class="alert alert-warning alert-dismissible fade show" role="alert">
+                                        <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                                        <strong>Caution</strong> - Your attendance is approaching the minimum
+                                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                                    </div>
+                                {% elif bunk_recommendations.status == 'critical' %}
+                                    <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                                        <i class="bi bi-exclamation-circle-fill me-2"></i>
+                                        <strong>Critical</strong> - Your attendance is below minimum threshold
+                                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                                    </div>
+                                {% endif %}
+                            </div>
+                            
+                            <!-- Key Metrics -->
+                            <div class="bunk-metrics">
+                                <div class="metric-row">
+                                    <div class="metric-box metric-primary">
+                                        <span class="metric-label">Safe Bunks</span>
+                                        <span class="metric-value">{{ bunk_recommendations.safe_bunks }}</span>
+                                    </div>
+                                    <div class="metric-box metric-info">
+                                        <span class="metric-label">Attendance</span>
+                                        <span class="metric-value">{{ bunk_recommendations.current_percentage }}%</span>
+                                    </div>
+                                </div>
+                                <div class="metric-row">
+                                    <div class="metric-box metric-success">
+                                        <span class="metric-label">Attended</span>
+                                        <span class="metric-value">{{ bunk_recommendations.classes_attended }}</span>
+                                    </div>
+                                    <div class="metric-box metric-warning">
+                                        <span class="metric-label">Total Held</span>
+                                        <span class="metric-value">{{ bunk_recommendations.total_classes_held }}</span>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Message -->
+                            <div class="alert alert-info mt-3 mb-3">
+                                <small><i class="bi bi-lightbulb me-1"></i> {{ bunk_recommendations.message }}</small>
+                            </div>
+                            
+                            <!-- Recommendations List -->
+                            <div class="recommendations-list">
+                                <h6 class="text-uppercase text-muted" style="font-size: 0.85rem; letter-spacing: 0.5px;">💡 Smart Tips</h6>
+                                <ul class="list-unstyled">
+                                    {% for rec in bunk_recommendations.recommendations %}
+                                        <li class="recommendation-item">
+                                            <i class="bi bi-arrow-right-short"></i>
+                                            <small>{{ rec }}</small>
+                                        </li>
+                                    {% endfor %}
+                                </ul>
+                            </div>
+                        {% else %}
+                            <div class="alert alert-secondary">
+                                <i class="bi bi-info-circle me-2"></i>
+                                <small>Bunk allowance data will be calculated once your attendance is marked by faculty.</small>
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Profile Card -->
+            <div class="col-lg-6">
+                <div class="card card-glass card-hover">
+                    <div class="card-body">
+                        <h5 class="section-title mb-4">
+                            <i class="bi bi-person-circle"></i>
+                            Student Profile
+                        </h5>
+                        
+                        <!-- Profile Info Grid -->
+                        <div class="profile-info">
+                            <div class="info-row">
+                                <label class="info-label">
+                                    <i class="bi bi-hash me-2"></i>SRN
+                                </label>
+                                <span class="info-value">{{ current_user.username }}</span>
+                            </div>
+                            <div class="info-row">
+                                <label class="info-label">
+                                    <i class="bi bi-person me-2"></i>Full Name
+                                </label>
+                                <span class="info-value">{{ current_user.name }}</span>
+                            </div>
+                            <div class="info-row">
+                                <label class="info-label">
+                                    <i class="bi bi-shield-lock me-2"></i>Role
+                                </label>
+                                <span class="info-value">
+                                    <span class="badge bg-primary" style="font-size: 0.85rem; padding: 0.4rem 0.8rem;">
+                                        {{ current_user.role|upper }}
+                                    </span>
+                                </span>
+                            </div>
+                            <div class="info-row">
+                                <label class="info-label">
+                                    <i class="bi bi-toggle-on me-2"></i>Account Status
+                                </label>
+                                <span class="info-value">
+                                    {% if current_user.account_locked %}
+                                        <span class="badge bg-danger" style="font-size: 0.85rem; padding: 0.4rem 0.8rem;">
+                                            <i class="bi bi-lock me-1"></i>Locked
+                                        </span>
+                                    {% else %}
+                                        <span class="badge bg-success" style="font-size: 0.85rem; padding: 0.4rem 0.8rem;">
+                                            <i class="bi bi-check-circle me-1"></i>Active
+                                        </span>
+                                    {% endif %}
+                                </span>
+                            </div>
+                        </div>
+                        
+                        <hr class="my-4">
+                        
+                        <!-- Quick Actions -->
+                        <h6 class="text-uppercase text-muted mb-3" style="font-size: 0.85rem; letter-spacing: 0.5px;">Quick Actions</h6>
+                        <div class="action-buttons">
+                            <a href="{{ url_for('change_password') }}" class="action-btn action-btn-outline">
+                                <i class="bi bi-key me-2"></i>Change Password
+                            </a>
+                            <a href="{{ url_for('request_leave') }}" class="action-btn action-btn-outline">
+                                <i class="bi bi-calendar2-x me-2"></i>Request Leave
+                            </a>
+                            <a href="{{ url_for('correction_request_page') }}" class="action-btn action-btn-outline">
+                                <i class="bi bi-pencil-square me-2"></i>Correct Attendance
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        </div>
+
+        <div class="row mt-4 g-4">
+            <div class="col-12">
+                <div class="alert alert-info alert-lg shadow-sm" role="alert">
+                    <div class="d-flex align-items-start">
+                        <i class="bi bi-info-circle-fill me-3" style="font-size: 1.5rem; flex-shrink: 0;"></i>
+                        <div>
+                            <h6 class="alert-heading mb-1">Important: Attendance Policy</h6>
+                            <p class="mb-0" style="line-height: 1.6;">
+                                You must maintain <strong>at least 75% attendance</strong> to be eligible for your semester exams. 
+                                Your current attendance is <strong class="text-gradient">{{ attendance_percentage }}%</strong>.
+                                {% if attendance_percentage >= 80 %}
+                                    <span class="ms-2" style="color: #28a745;">✅ You're in a safe zone - keep it up!</span>
+                                {% elif attendance_percentage >= 75 %}
+                                    <span class="ms-2" style="color: #ffc107;">⚠️ You're at the minimum - be careful with bunks!</span>
+                                {% else %}
+                                    <span class="ms-2" style="color: #dc3545;">🚨 Critical - attend all remaining classes immediately!</span>
+                                {% endif %}
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Dark Mode Toggle Button -->
+    <button class="theme-toggle" id="themeToggle" aria-label="Toggle dark mode">
+        <i class="bi bi-moon-stars-fill"></i>
+    </button>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+    <script>
+        // Set progress bar widths from data attributes
+        document.addEventListener('DOMContentLoaded', function() {
+            document.querySelectorAll('.progress-bar[data-percentage]').forEach(function(bar) {
+                var percentage = bar.getAttribute('data-percentage');
+                bar.style.width = percentage + '%';
+            });
+        });
+    </script>
+</body>
+</html>
